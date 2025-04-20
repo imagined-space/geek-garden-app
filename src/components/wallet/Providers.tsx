@@ -60,13 +60,7 @@ const wagmiConfig = createConfig({
 // 导出最终的提供者组件
 export function Web3Providers({ children }: { children: ReactNode }) {
   const { language } = useLanguage();
-  const [mounted, setMounted] = useState(false);
   const [locale, setLocale] = useState<Locale>('zh-CN' as Locale);
-
-  // 处理客户端水合不匹配
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // 根据语言更新区域设置
   useEffect(() => {
@@ -101,12 +95,11 @@ export function Web3Providers({ children }: { children: ReactNode }) {
           locale={locale}
           showRecentTransactions={true}
           appInfo={{
-            appName: 'Web3 University',
+            appName: 'Geek University',
             learnMoreUrl: '/about',
           }}
         >
-          {/* 重要：始终使用一个包装元素，即使隐藏也保持DOM结构一致 */}
-          {!mounted ? <div style={{ visibility: 'hidden' }}>{children}</div> : children}
+          {children}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
