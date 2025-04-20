@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { LanguageProvider } from '@components/language/Context';
 import { Web3Providers } from '@components/wallet/Providers';
+import { headers, cookies } from 'next/headers';
 
 import './globals.css';
 import '@rainbow-me/rainbowkit/styles.css';
@@ -17,16 +18,33 @@ export const metadata: Metadata = {
   description: 'A Web3 learning platform with cyberpunk style',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const headersList = await headers()
+  const cookie = cookieStore.get('preferred-language');
+  const languageHeader = headersList.get('accept-language');
+
+  let language = 'en'; // 默认语言
+
+  try {
+    if (cookie) {
+      language = cookie.value;
+    } else if (languageHeader) {
+      language = languageHeader.split(',')[0].toLocaleLowerCase();
+    }
+  } catch (error) {
+    console.error('[Layout][language]', error);
+  }
+
   return (
-    <html lang="en">
+    <html lang={language}>
       <body className='cyberpunk-theme'>
         <JotaiProvider>
-          <LanguageProvider>
+          <LanguageProvider initialLanguage={language}>
             <Web3Providers>
               <WalletAuthListener />
               <Header />

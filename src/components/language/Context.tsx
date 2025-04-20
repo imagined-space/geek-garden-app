@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
 import {
   getTranslation,
   Language,
@@ -11,21 +11,52 @@ import {
 // 创建语言环境上下文
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export const LanguageProvider = ({ children }: LanguageProviderProps) => {
-  // 获取初始语言
-  const getInitialLanguage = (): Language => 'en';  // 默认语言
+const formatterLanguage = (language: string): Language => {
+  // 将语言字符串转换为小写
+  const lang = language.toLowerCase().split('-')[0];
 
-  const [language, setLanguage] = useState<Language>('en');
+  // 检查语言是否在支持的列表中
+  if (['zh', 'en', 'ja', 'ko'].includes(lang)) {
+    return lang as Language;
+  }
+
+  // 默认返回英文
+  return 'en';
+}
+
+export const LanguageProvider = ({ children, initialLanguage }: LanguageProviderProps) => {
+  // 获取初始语言
+  const getInitialLanguage = useMemo((): Language => {
+    // 检查本地存储
+    if (typeof window !== 'undefined') {
+      const savedLanguage = localStorage.getItem('preferred-language') as Language;
+      if (savedLanguage && ['zh', 'en', 'ja', 'ko'].includes(savedLanguage)) {
+        return savedLanguage;
+      }
+    }
+    
+    // 默认语言
+    return 'en';
+  }, []);
+
+  // cookie > navigator.language > localStorage > 默认语言
+  const [language, setLanguage] = useState<Language>(() => formatterLanguage(initialLanguage));
 
   // 初始化语言 - 在客户端挂载后执行
   useEffect(() => {
-    const initialLang = getInitialLanguage();
-    setLanguage(initialLang);
-  }, []);
+    if (!initialLanguage) {
+      setLanguage(getInitialLanguage);
+    }
+  }, [initialLanguage, getInitialLanguage]);
 
-  // 切换语言
+  // 切换语言并保存到本地存储
   const handleSetLanguage = (newLanguage: Language) => {
     setLanguage(newLanguage);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferred-language', newLanguage);
+      // 保存到 cookie
+      document.cookie = `preferred-language=${newLanguage}; path=/; max-age=31536000;`;
+    }
   };
 
   // 翻译函数
