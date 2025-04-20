@@ -5,6 +5,7 @@ import { useLanguage } from '@components/language/Context';
 import CourseSection from '@/components/courses/CourseSection';
 import { TokenExchange } from '@components/token/TokenExchange';
 import CountUp from '@/components/ui/CountUp';
+import Orb from '@components/common/Orb';
 
 const HomePage = () => {
   const { t } = useLanguage();
@@ -13,10 +14,10 @@ const HomePage = () => {
     <section>
       {/* Hero section */}
       <section className="relative bg-dark-bg cyberpunk-overlay text-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center py-16 md:py-20">
             <div className="flex flex-col justify-between h-full">
-              <div className="h-1/2 flex flex-col justify-center">
+              <div className="flex flex-col justify-center">
                 <h1 className="cyberpunk-title text-5xl font-bold mb-6 ">{t('hero.welcome')}</h1>
                 <p className="cyberpunk-glow text-lg md:text-2xl mb-4 text-neon-blue">
                   {t('hero.subtitle')}
@@ -24,14 +25,8 @@ const HomePage = () => {
               </div>
               <TokenExchange />
             </div>
-            <div className="hidden md:block">
-              <div className="rounded-lg overflow-hidden">
-                <img
-                  className="opacity-45"
-                  src="/images/banner-homepage.jpeg"
-                  alt="banner-homepage"
-                />
-              </div>
+            <div className="hidden md:block h-[450px]">
+              <Orb />
             </div>
           </div>
         </div>

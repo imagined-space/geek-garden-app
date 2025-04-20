@@ -12,6 +12,7 @@ interface CountUpProps {
     className?: string;
     startWhen?: boolean;
     separator?: string;
+    decimalPlaces?: number;
     onStart?: () => void;
     onEnd?: () => void;
 }
@@ -25,6 +26,7 @@ export default function CountUp({
     className = "",
     startWhen = true,
     separator = "",
+    decimalPlaces = 0,
     onStart,
     onEnd,
 }: CountUpProps) {
@@ -80,12 +82,12 @@ export default function CountUp({
             if (ref.current) {
                 const options = {
                     useGrouping: !!separator,
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
+                    minimumFractionDigits: decimalPlaces,
+                    maximumFractionDigits: decimalPlaces,
                 };
 
                 const formattedNumber = Intl.NumberFormat("en-US", options).format(
-                    Number(latest.toFixed(0))
+                    Number(latest.toFixed(decimalPlaces))
                 );
 
                 ref.current.textContent = separator
@@ -95,7 +97,7 @@ export default function CountUp({
         });
 
         return () => unsubscribe();
-    }, [springValue, separator]);
+    }, [springValue, separator, decimalPlaces]);
 
     return <span className={`${className}`} ref={ref} />;
 }

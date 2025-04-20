@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useRef, memo, useState, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import { ParticleGroup, ParticlesBackgroundProps } from '@/types/particles';

@@ -38,9 +38,126 @@
   pointer-events: none;
 }
 
+/* 为 Orb 组件中的文字 G 添加粒子动画 */
+.particles-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  overflow: visible;
+}
+
+.particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--particle-size, 8px);
+  height: var(--particle-size, 8px);
+  background: currentColor;
+  border-radius: 50%;
+  opacity: var(--particle-opacity, 0.6);
+  pointer-events: none;
+  animation: particle-float var(--particle-duration, 1s) ease-out var(--particle-delay, 0s) infinite;
+  transform: scale(0);
+  will-change: transform, opacity;
+}
+
+@keyframes particle-float {
+  0% {
+    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--particle-opacity, 0.6);
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: 
+      translate(
+        calc(-50% + cos(var(--particle-direction, 0deg)) * var(--particle-distance, 50px)),
+        calc(-50% + sin(var(--particle-direction, 0deg)) * var(--particle-distance, 50px))
+      )
+      scale(0.2)
+      rotate(180deg);
+  }
+}
+
 /* 噪点效果 */
 .bg-noise {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' /%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 150px;
+}
+
+/* Orb 中心文字特效 */
+.orb-center-text {
+  letter-spacing: 1px;
+  position: relative;
+  z-index: 20;
+  user-select: none;
+}
+
+@keyframes orb-text-pulse {
+  0%, 100% {
+    text-shadow: 0 0 15px var(--neon-blue), 0 0 30px var(--neon-blue), 0 0 45px var(--neon-purple);
+  }
+  50% {
+    text-shadow: 0 0 25px var(--neon-blue), 0 0 50px var(--neon-blue), 0 0 75px var(--neon-purple), 0 0 100px var(--neon-pink);
+  }
+}
+
+.orb-center-text:hover {
+  animation: orb-text-pulse 1.5s ease-in-out infinite;
+}
+
+/* Orb 粒子容器 */
+.orb-particles-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  overflow: visible;
+}
+
+/* Orb 粒子 */
+.orb-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--particle-size, 8px);
+  height: var(--particle-size, 8px);
+  border-radius: 50%;
+  opacity: var(--particle-opacity, 0.6);
+  pointer-events: none;
+  animation: orb-particle-float var(--particle-duration, 1s) ease-out var(--particle-delay, 0s) infinite;
+  transform: scale(0);
+  will-change: transform, opacity;
+  box-shadow: 0 0 calc(var(--particle-size, 8px) * 0.5) currentColor;
+  filter: blur(1px);
+}
+
+@keyframes orb-particle-float {
+  0% {
+    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--particle-opacity, 0.6);
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: 
+      translate(
+        calc(-50% + cos(var(--particle-direction, 0deg)) * var(--particle-distance, 50px)),
+        calc(-50% + sin(var(--particle-direction, 0deg)) * var(--particle-distance, 50px))
+      )
+      scale(0.2)
+      rotate(180deg);
+  }
 }

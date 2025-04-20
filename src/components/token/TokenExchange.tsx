@@ -3,88 +3,9 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useAtom } from 'jotai';
 import { walletConnectedAtom } from '@/stores/walletStore';
-import { CustomConnectButton } from '@components/wallet/CustomConnectButton';
 import { useTokenExchange } from '@/hooks/useTokenExchange';
 import { useLanguage } from '@/components/language/Context';
-
-// 提取AnimatedNumber为独立组件，并使用memo优化
-const AnimatedNumber = memo(
-  ({
-    value,
-    duration = 1000,
-    format = 'decimal',
-  }: {
-    value: number | string;
-    duration?: number;
-    format?: 'integer' | 'decimal';
-  }) => {
-    const [displayValue, setDisplayValue] = useState(value);
-    const [isAnimating, setIsAnimating] = useState(false);
-
-    useEffect(() => {
-      if (value === displayValue) return;
-
-      setIsAnimating(true);
-      // 先检查是否为有效数字，避免NaN
-      const startValueStr = String(displayValue);
-      const endValueStr = String(value);
-
-      // 避免嵌套三元表达式并使用Number.isNaN替代全局isNaN
-      let startValue: number;
-      if (typeof displayValue === 'number') {
-        startValue = displayValue;
-      } else {
-        const parsed = parseFloat(startValueStr);
-        startValue = Number.isNaN(parsed) ? 0 : parsed;
-      }
-
-      let endValue: number;
-      if (typeof value === 'number') {
-        endValue = value;
-      } else {
-        const parsed = parseFloat(endValueStr);
-        endValue = Number.isNaN(parsed) ? 0 : parsed;
-      }
-      const startTime = performance.now();
-
-      const animate = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const currentValue = startValue + (endValue - startValue) * progress;
-
-        const formattedValue =
-          format === 'integer' ? Math.floor(currentValue).toString() : currentValue.toFixed(3);
-        setDisplayValue(formattedValue);
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          // 确保最终值是有效的字符串而不是NaN
-          let finalValue: string;
-          if (format === 'integer') {
-            finalValue = Math.floor(endValue).toString();
-          } else if (typeof value === 'number') {
-            finalValue = value.toFixed(3);
-          } else {
-            finalValue = String(value);
-          }
-          setDisplayValue(finalValue);
-          setIsAnimating(false);
-        }
-      };
-
-      requestAnimationFrame(animate);
-    }, [value, duration, format, displayValue]);
-
-    return (
-      <span className={`transition-all duration-300 ${isAnimating ? 'text-[#00ffff]' : ''}`}>
-        {displayValue}
-      </span>
-    );
-  },
-);
-
-AnimatedNumber.displayName = 'AnimatedNumber';
+import CountUp from '@/components/ui/CountUp';
 
 // 提取NeonCard组件
 const NeonCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -195,15 +116,7 @@ export const TokenExchange: React.FC = () => {
 
   // 渲染未连接钱包状态
   if (!walletConnected) {
-    return (
-      <NeonCard>
-        <h2 className="text-2xl font-bold text-white mb-6">{t('tokenExchange.title')}</h2>
-        <p className="text-gray-300 mb-6">{t('tokenExchange.connectWallet')}</p>
-        <div className="flex justify-center">
-          <CustomConnectButton />
-        </div>
-      </NeonCard>
-    );
+    return null;
   }
 
   // 渲染网络不正确状态
@@ -229,29 +142,77 @@ export const TokenExchange: React.FC = () => {
       </h2>
 
       <div className="flex justify-between items-center mb-6">
-        <div className="text-gray-300 text-2xl">
-          <p>
-            {t('tokenExchange.ethBalance')} <AnimatedNumber value={ethBalance} format="decimal" />
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setIsBuying(!isBuying);
-            setAmount('');
-          }}
-          className="text-[#00ffff] mx-4 hover:text-[#ff00ff] transition-all duration-300 text-4xl group-hover:text-[#ff00ff] "
-        >
-          ⇄
-        </button>
-        <div className="text-gray-300 text-2xl">
-          <p>
-            {t('tokenExchange.ydBalance')}{' '}
-            <AnimatedNumber
-              value={ydBalance ? parseInt(ydBalance.toString(), 10) : 0}
-              format="integer"
-            />
-          </p>
-        </div>
+        {isBuying ? (
+          <>
+            <div className="text-gray-300">
+              <p>
+                {t('tokenExchange.ethBalance')}{' '}
+                <CountUp
+                  to={Number(ethBalance)}
+                  duration={1}
+                  separator=","
+                  className="text-[#00ffff]"
+                  decimalPlaces={4}
+                />
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsBuying(!isBuying);
+                setAmount('');
+              }}
+              className="text-[#00ffff] mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff]"
+            >
+              ⇄
+            </button>
+            <div className="text-gray-300">
+              <p>
+                {t('tokenExchange.ydBalance')}{' '}
+                <CountUp
+                  to={ydBalance ? parseInt(ydBalance.toString(), 10) : 0}
+                  duration={1}
+                  separator=","
+                  className="text-[#00ffff]"
+                />
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-gray-300">
+              <p>
+                {t('tokenExchange.ydBalance')}{' '}
+                <CountUp
+                  to={ydBalance ? parseInt(ydBalance.toString(), 10) : 0}
+                  duration={1}
+                  separator=","
+                  className="text-[#00ffff]"
+                />
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsBuying(!isBuying);
+                setAmount('');
+              }}
+              className="text-[#00ffff] mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff]"
+            >
+              ⇄
+            </button>
+            <div className="text-gray-300">
+              <p>
+                {t('tokenExchange.ethBalance')}{' '}
+                <CountUp
+                  to={Number(ethBalance)}
+                  duration={1}
+                  separator=","
+                  className="text-[#00ffff]"
+                  decimalPlaces={4}
+                />
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex items-center justify-between mb-6">
