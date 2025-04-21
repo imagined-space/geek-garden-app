@@ -137,6 +137,9 @@ export default [
 
       // 解决Next.js Image组件问题的规则
       '@next/next/no-img-element': 'off', // 禁用img标签检查
+
+      // 箭头函数体风格规则
+      'arrow-body-style': 'as-needed', 
     },
   },
 ];

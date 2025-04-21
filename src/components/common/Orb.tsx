@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Renderer, Program, Mesh, Triangle, Vec3 } from 'ogl';
+import { vert, frag } from '@/utils/orb/shader';
 
 interface OrbProps {
   hue?: number;
@@ -22,176 +23,128 @@ export default function Orb({
 }: OrbProps) {
   const ctnDom = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  // 性能监控
+  const [fps, setFps] = useState(0);
+  const frameCount = useRef(0);
+  const lastFpsUpdate = useRef(0);
 
-  const vert = /* glsl */ `
-    precision highp float;
-    attribute vec2 position;
-    attribute vec2 uv;
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = vec4(position, 0.0, 1.0);
-    }
-  `;
+  // 粒子和颜色状态 - 由 Worker 计算
+  const webWorkerRef = useRef<Worker | null>(null);
+  const [particles, setParticles] = useState<any[]>([]);
+  const [adjustedColors, setAdjustedColors] = useState<number[][]>([]);
+  const lastHue = useRef(hue);
+  
+  // 提前创建预计算的颜色 uniform
+  const precomputedColorsRef = useRef(new Float32Array(9));
+  const resolutionVec = useRef(new Vec3());
+  const adaptiveFrameskip = useRef({
+    frameTime: 1000 / 60,
+    skipCounter: 0,
+    skipThreshold: 2,
+  });
 
-  const frag = /* glsl */ `
-    precision highp float;
+  // 使用 useMemo 缓存重计算的值
+  const rendererOptions = useMemo(
+    () => ({
+      alpha: true,
+      premultipliedAlpha: false,
+      powerPreference: 'high-performance',
+      depth: false,
+      stencil: false,
+    }),
+    [],
+  );
 
-    uniform float iTime;
-    uniform vec3 iResolution;
-    uniform float hue;
-    uniform float hover;
-    uniform float rot;
-    uniform float hoverIntensity;
-    varying vec2 vUv;
+  // 初始化 Web Worker
+  useEffect(() => {
+    // 确保只在客户端创建 Web Worker
+    if (typeof window !== 'undefined') {
+      webWorkerRef.current = new Worker(new URL('@/utils/orb/web-worker.ts', import.meta.url), {
+        type: 'module',
+      });
 
-    vec3 rgb2yiq(vec3 c) {
-      float y = dot(c, vec3(0.299, 0.587, 0.114));
-      float i = dot(c, vec3(0.596, -0.274, -0.322));
-      float q = dot(c, vec3(0.211, -0.523, 0.312));
-      return vec3(y, i, q);
-    }
-    
-    vec3 yiq2rgb(vec3 c) {
-      float r = c.x + 0.956 * c.y + 0.621 * c.z;
-      float g = c.x - 0.272 * c.y - 0.647 * c.z;
-      float b = c.x - 1.106 * c.y + 1.703 * c.z;
-      return vec3(r, g, b);
-    }
-    
-    vec3 adjustHue(vec3 color, float hueDeg) {
-      float hueRad = hueDeg * 3.14159265 / 180.0;
-      vec3 yiq = rgb2yiq(color);
-      float cosA = cos(hueRad);
-      float sinA = sin(hueRad);
-      float i = yiq.y * cosA - yiq.z * sinA;
-      float q = yiq.y * sinA + yiq.z * cosA;
-      yiq.y = i;
-      yiq.z = q;
-      return yiq2rgb(yiq);
-    }
-    
-    vec3 hash33(vec3 p3) {
-      p3 = fract(p3 * vec3(0.1031, 0.11369, 0.13787));
-      p3 += dot(p3, p3.yxz + 19.19);
-      return -1.0 + 2.0 * fract(vec3(
-        p3.x + p3.y,
-        p3.x + p3.z,
-        p3.y + p3.z
-      ) * p3.zyx);
-    }
-    
-    float snoise3(vec3 p) {
-      const float K1 = 0.333333333;
-      const float K2 = 0.166666667;
-      vec3 i = floor(p + (p.x + p.y + p.z) * K1);
-      vec3 d0 = p - (i - (i.x + i.y + i.z) * K2);
-      vec3 e = step(vec3(0.0), d0 - d0.yzx);
-      vec3 i1 = e * (1.0 - e.zxy);
-      vec3 i2 = 1.0 - e.zxy * (1.0 - e);
-      vec3 d1 = d0 - (i1 - K2);
-      vec3 d2 = d0 - (i2 - K1);
-      vec3 d3 = d0 - 0.5;
-      vec4 h = max(0.6 - vec4(
-        dot(d0, d0),
-        dot(d1, d1),
-        dot(d2, d2),
-        dot(d3, d3)
-      ), 0.0);
-      vec4 n = h * h * h * h * vec4(
-        dot(d0, hash33(i)),
-        dot(d1, hash33(i + i1)),
-        dot(d2, hash33(i + i2)),
-        dot(d3, hash33(i + 1.0))
-      );
-      return dot(vec4(31.316), n);
-    }
-    
-    vec4 extractAlpha(vec3 colorIn) {
-      float a = max(max(colorIn.r, colorIn.g), colorIn.b);
-      return vec4(colorIn.rgb / (a + 1e-5), a);
-    }
-    
-    const vec3 baseColor1 = vec3(0.611765, 0.262745, 0.996078);
-    const vec3 baseColor2 = vec3(0.298039, 0.760784, 0.913725);
-    const vec3 baseColor3 = vec3(0.062745, 0.078431, 0.600000);
-    const float innerRadius = 0.6;
-    const float noiseScale = 0.65;
-    
-    float light1(float intensity, float attenuation, float dist) {
-      return intensity / (1.0 + dist * attenuation);
-    }
-    
-    float light2(float intensity, float attenuation, float dist) {
-      return intensity / (1.0 + dist * dist * attenuation);
-    }
-    
-    vec4 draw(vec2 uv) {
-      vec3 color1 = adjustHue(baseColor1, hue);
-      vec3 color2 = adjustHue(baseColor2, hue);
-      vec3 color3 = adjustHue(baseColor3, hue);
-      
-      float ang = atan(uv.y, uv.x);
-      float len = length(uv);
-      float invLen = len > 0.0 ? 1.0 / len : 0.0;
-      
-      float n0 = snoise3(vec3(uv * noiseScale, iTime * 0.5)) * 0.5 + 0.5;
-      float r0 = mix(mix(innerRadius, 1.0, 0.4), mix(innerRadius, 1.0, 0.6), n0);
-      float d0 = distance(uv, (r0 * invLen) * uv);
-      float v0 = light1(1.0, 10.0, d0);
-      v0 *= smoothstep(r0 * 1.05, r0, len);
-      float cl = cos(ang + iTime * 2.0) * 0.5 + 0.5;
-      
-      float a = iTime * -1.0;
-      vec2 pos = vec2(cos(a), sin(a)) * r0;
-      float d = distance(uv, pos);
-      float v1 = light2(1.5, 5.0, d);
-      v1 *= light1(1.0, 50.0, d0);
-      
-      float v2 = smoothstep(1.0, mix(innerRadius, 1.0, n0 * 0.5), len);
-      float v3 = smoothstep(innerRadius, mix(innerRadius, 1.0, 0.5), len);
-      
-      vec3 col = mix(color1, color2, cl);
-      col = mix(color3, col, v0);
-      col = (col + v1) * v2 * v3;
-      col = clamp(col, 0.0, 1.0);
-      
-      return extractAlpha(col);
-    }
-    
-    vec4 mainImage(vec2 fragCoord) {
-      vec2 center = iResolution.xy * 0.5;
-      float size = min(iResolution.x, iResolution.y);
-      vec2 uv = (fragCoord - center) / size * 2.0;
-      
-      float angle = rot;
-      float s = sin(angle);
-      float c = cos(angle);
-      uv = vec2(c * uv.x - s * uv.y, s * uv.x + c * uv.y);
-      
-      uv.x += hover * hoverIntensity * 0.1 * sin(uv.y * 10.0 + iTime);
-      uv.y += hover * hoverIntensity * 0.1 * sin(uv.x * 10.0 + iTime);
-      
-      return draw(uv);
-    }
-    
-    void main() {
-      vec2 fragCoord = vUv * iResolution.xy;
-      vec4 col = mainImage(fragCoord);
-      gl_FragColor = vec4(col.rgb * col.a, col.a);
-    }
-  `;
+      // 监听 Worker 的消息
+      webWorkerRef.current.onmessage = event => {
+        const { type, data } = event.data;
 
+        if (type === 'particles') {
+          setParticles(data);
+        } else if (type === 'hueAdjustment') {
+          setAdjustedColors(data.colors);
+          lastHue.current = data.hue;
+        }
+      };
+
+      // 请求初始粒子数据
+      webWorkerRef.current.postMessage({
+        type: 'calculateParticles',
+        data: { count: 20 },
+      });
+
+      // 请求初始色相调整
+      webWorkerRef.current.postMessage({
+        type: 'calculateHueAdjustment',
+        data: {
+          baseColors: [
+            [0.611765, 0.262745, 0.996078],
+            [0.298039, 0.760784, 0.913725],
+            [0.062745, 0.078431, 0.6],
+          ],
+          hue,
+        },
+      });
+    }
+
+    return () => {
+      // 清理 Web Worker
+      if (webWorkerRef.current) {
+        webWorkerRef.current.terminate();
+        webWorkerRef.current = null;
+      }
+    };
+  }, []);
+
+  // 当 hue 色调改变时，请求新的颜色计算
+  useEffect(() => {
+    if (webWorkerRef.current && hue !== lastHue.current) {
+      webWorkerRef.current.postMessage({
+        type: 'calculateHueAdjustment',
+        data: {
+          baseColors: [
+            [0.611765, 0.262745, 0.996078],
+            [0.298039, 0.760784, 0.913725],
+            [0.062745, 0.078431, 0.6],
+          ],
+          hue,
+        },
+      });
+    }
+  }, [hue]);
+
+  // 更新预计算的颜色数组
+  useEffect(() => {
+    if (adjustedColors.length === 3) {
+      const arr = precomputedColorsRef.current;
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          arr[i * 3 + j] = adjustedColors[i][j];
+        }
+      }
+    }
+  }, [adjustedColors]);
+
+  // WebGL 渲染
   useEffect(() => {
     const container = ctnDom.current;
     if (!container) return;
 
-    const renderer = new Renderer({ alpha: true, premultipliedAlpha: false });
-    const gl = renderer.gl;
+    const renderer = new Renderer(rendererOptions);
+    const { gl } = renderer;
     gl.clearColor(0, 0, 0, 0);
     container.appendChild(gl.canvas);
 
     const geometry = new Triangle(gl);
+
     const program = new Program(gl, {
       vertex: vert,
       fragment: frag,
@@ -204,6 +157,8 @@ export default function Orb({
         hover: { value: 0 },
         rot: { value: 0 },
         hoverIntensity: { value: hoverIntensity },
+        // 将预计算的颜色传递给着色器，减少着色器中的计算
+        precomputedColors: { value: precomputedColorsRef.current },
       },
     });
 
@@ -215,15 +170,26 @@ export default function Orb({
       const width = container.clientWidth;
       const height = container.clientHeight;
       renderer.setSize(width * dpr, height * dpr);
-      gl.canvas.style.width = width + 'px';
-      gl.canvas.style.height = height + 'px';
-      program.uniforms.iResolution.value.set(
-        gl.canvas.width,
-        gl.canvas.height,
-        gl.canvas.width / gl.canvas.height,
+      gl.canvas.style.width = `${width}px`;
+      gl.canvas.style.height = `${height}px`;
+
+      // 使用预先分配的向量对象
+      resolutionVec.current.set(
+        gl.canvas.width, 
+        gl.canvas.height, 
+        gl.canvas.width / gl.canvas.height
       );
+      program.uniforms.iResolution.value = resolutionVec.current;
     }
-    window.addEventListener('resize', resize);
+
+    // 使用防抖函数优化 resize 事件
+    let resizeTimeout: number;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = window.setTimeout(resize, 100);
+    };
+
+    window.addEventListener('resize', handleResize);
     resize();
 
     let targetHover = 0;
@@ -231,19 +197,22 @@ export default function Orb({
     let currentRot = 0;
     const rotationSpeed = 0.3; // radians per second
 
+    // 优化鼠标移动处理器，使用距离平方计算而不是距离
     const handleMouseMove = (e: MouseEvent) => {
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const width = rect.width;
-      const height = rect.height;
+      const { width, height } = rect;
       const size = Math.min(width, height);
       const centerX = width / 2;
       const centerY = height / 2;
       const uvX = ((x - centerX) / size) * 2.0;
       const uvY = ((y - centerY) / size) * 2.0;
 
-      if (Math.sqrt(uvX * uvX + uvY * uvY) < 0.8) {
+      // 使用距离平方避免开方操作
+      const distSq = uvX * uvX + uvY * uvY;
+      if (distSq < 0.64) {
+        // 0.8^2 = 0.64
         targetHover = 1;
       } else {
         targetHover = 0;
@@ -257,52 +226,145 @@ export default function Orb({
     container.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseleave', handleMouseLeave);
 
+    // 监听 WebGL 上下文丢失事件
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      cancelAnimationFrame(rafId);
+    };
+
+    // 监听 WebGL 上下文恢复事件
+    const handleContextRestored = () => {
+      // 重新初始化必要资源
+      resize();
+      rafId = requestAnimationFrame(update);
+    };
+
+    gl.canvas.addEventListener('webglcontextlost', handleContextLost);
+    gl.canvas.addEventListener('webglcontextrestored', handleContextRestored);
+
+    // 动画循环
     let rafId: number;
     const update = (t: number) => {
-      rafId = requestAnimationFrame(update);
-      const dt = (t - lastTime) * 0.001;
-      lastTime = t;
-      program.uniforms.iTime.value = t * 0.001;
-      program.uniforms.hue.value = hue;
-      program.uniforms.hoverIntensity.value = hoverIntensity;
+      // 适应性帧率控制：在性能问题下降低频率
+      const now = performance.now();
+      const timeSinceLastFrame = now - lastTime;
 
+      // 计算 FPS - 仅在开发模式下
+      if (process.env.NODE_ENV === 'development') {
+        frameCount.current++;
+        if (t - lastFpsUpdate.current >= 1000) {
+          // 每秒更新一次
+          setFps(frameCount.current);
+          frameCount.current = 0;
+          lastFpsUpdate.current = t;
+
+          // 动态调整跳帧阈值
+          if (frameCount.current < 40) {
+            adaptiveFrameskip.current.skipThreshold = Math.min(
+              adaptiveFrameskip.current.skipThreshold + 1,
+              5,
+            );
+          } else if (frameCount.current > 55) {
+            adaptiveFrameskip.current.skipThreshold = Math.max(
+              adaptiveFrameskip.current.skipThreshold - 1,
+              0,
+            );
+          }
+        }
+      }
+
+      // 自适应帧跳过：如果帧时间短于目标且不在交互状态
+      adaptiveFrameskip.current.skipCounter++;
+      if (
+        timeSinceLastFrame < adaptiveFrameskip.current.frameTime &&
+        program.uniforms.hover.value < 0.1 &&
+        !forceHoverState &&
+        adaptiveFrameskip.current.skipCounter < adaptiveFrameskip.current.skipThreshold
+      ) {
+        rafId = requestAnimationFrame(update);
+        return;
+      }
+
+      adaptiveFrameskip.current.skipCounter = 0;
+      lastTime = now;
+
+      // 如果颜色已更新，将其应用到着色器
+      program.uniforms.precomputedColors.value = precomputedColorsRef.current;
+
+      // 更新着色器 uniforms
+      const currentTime = t * 0.001;
+      const dt = currentTime - (program.uniforms.iTime.value || 0);
+      program.uniforms.iTime.value = currentTime;
+
+      // 只有当值变化时才更新 uniform
+      if (program.uniforms.hue.value !== hue) {
+        program.uniforms.hue.value = hue;
+      }
+
+      if (program.uniforms.hoverIntensity.value !== hoverIntensity) {
+        program.uniforms.hoverIntensity.value = hoverIntensity;
+      }
+
+      // 平滑悬停状态变化
       const effectiveHover = forceHoverState ? 1 : targetHover;
-      program.uniforms.hover.value += (effectiveHover - program.uniforms.hover.value) * 0.1;
+      if (Math.abs(program.uniforms.hover.value - effectiveHover) > 0.001) {
+        program.uniforms.hover.value += (effectiveHover - program.uniforms.hover.value) * 0.1;
+      }
 
+      // 条件更新旋转
       if (rotateOnHover && effectiveHover > 0.5) {
         currentRot += dt * rotationSpeed;
+        program.uniforms.rot.value = currentRot;
       }
-      program.uniforms.rot.value = currentRot;
 
+      // 渲染场景
       renderer.render({ scene: mesh });
+      rafId = requestAnimationFrame(update);
     };
+
     rafId = requestAnimationFrame(update);
 
     return () => {
       cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', resize);
+      clearTimeout(resizeTimeout);
+
+      // 清理事件监听器
+      gl.canvas.removeEventListener('webglcontextlost', handleContextLost);
+      gl.canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+      window.removeEventListener('resize', handleResize);
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
+
+      // 释放 WebGL 资源
       container.removeChild(gl.canvas);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
+
+      // 清理其他资源
+      geometry.remove();
+      program.remove();
+      mesh.setParent(null); // 解除 Mesh 的父级关系
     };
-  }, [hue, hoverIntensity, rotateOnHover, forceHoverState]);
+  }, [hue, hoverIntensity, rotateOnHover, forceHoverState, rendererOptions]);
 
   return (
-    <div 
-      ref={ctnDom} 
-      className="w-full h-full relative"
-    >
+    <div ref={ctnDom} className="w-full h-full relative">
+      {/* 在开发模式下显示 FPS */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-0 right-0 bg-black bg-opacity-50 text-white px-2 py-1 z-50">
+          {fps} FPS
+        </div>
+      )}
+
       {/* 添加居中的文字层 */}
-      <div 
+      <div
         className="absolute inset-0 flex items-center justify-center z-10"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div 
+        <div
           className={`font-bold orb-center-text transition-all duration-300 ${isHovered ? 'scale-125' : 'scale-100'}`}
-          style={{ 
-            fontSize: textSize, 
+          style={{
+            fontSize: textSize,
             background: `linear-gradient(135deg, var(--neon-blue), var(--neon-purple), var(--neon-pink))`,
             backgroundSize: isHovered ? '200% 200%' : '100% 100%',
             WebkitBackgroundClip: 'text',
@@ -318,38 +380,43 @@ export default function Orb({
           }}
         >
           {text}
-          
-          {/* 鼠标悬停时的粒子效果 */}
-          {isHovered && (
+
+          {/* 鼠标悬停时显示计算好的粒子效果 */}
+          {isHovered && particles.length > 0 && (
             <div className="absolute inset-0 pointer-events-none">
               <div className="orb-particles-container">
-                {[...Array(20)].map((_, i) => (
-                  <div 
-                    key={i} 
+                {particles.map((particle, i) => (
+                  <div
+                    key={i}
                     className="orb-particle"
                     style={{
-                      '--particle-size': `${Math.random() * 12 + 3}px`,
-                      '--particle-distance': `${Math.random() * 120 + 30}px`,
-                      '--particle-duration': `${Math.random() * 1.5 + 0.8}s`,
-                      '--particle-opacity': `${Math.random() * 0.9 + 0.3}`,
-                      '--particle-delay': `${Math.random() * 0.3}s`,
-                      '--particle-direction': `${Math.random() * 360}deg`,
-                      '--particle-color': i % 4 === 0 ? 'var(--neon-blue)' : 
-                                          i % 4 === 1 ? 'var(--neon-purple)' : 
-                                          i % 4 === 2 ? 'var(--neon-pink)' : 
-                                          'var(--neon-green)',
+                      '--particle-size': `${particle.size}px`,
+                      '--particle-distance': `${particle.distance}px`,
+                      '--particle-duration': `${particle.duration}s`,
+                      '--particle-opacity': `${particle.opacity}`,
+                      '--particle-delay': `${particle.delay}s`,
+                      '--particle-direction': `${particle.direction}deg`,
+                      '--particle-color':
+                        particle.color === 0
+                          ? 'var(--neon-blue)'
+                          : particle.color === 1
+                            ? 'var(--neon-purple)'
+                            : particle.color === 2
+                              ? 'var(--neon-pink)'
+                              : 'var(--neon-green)',
                       background: 'var(--particle-color)',
                     } as React.CSSProperties}
-                  ></div>
+                  />
                 ))}
               </div>
             </div>
           )}
-          
-          {/* 叠加一层故障效果 */}
+
+          {/* 为了保持性能，只在悬停时加载故障效果 */}
           {isHovered && (
             <>
-              <div className="absolute inset-0 cyberpunk-glitch-clip -z-10"
+              <div
+                className="absolute inset-0 cyberpunk-glitch-clip -z-10"
                 style={{
                   content: "''",
                   background: `linear-gradient(135deg, var(--neon-blue), var(--neon-purple))`,
@@ -364,7 +431,8 @@ export default function Orb({
               >
                 {text}
               </div>
-              <div className="absolute inset-0 cyberpunk-glitch-clip -z-10"
+              <div
+                className="absolute inset-0 cyberpunk-glitch-clip -z-10"
                 style={{
                   content: "''",
                   background: `linear-gradient(135deg, var(--neon-pink), var(--neon-purple))`,
