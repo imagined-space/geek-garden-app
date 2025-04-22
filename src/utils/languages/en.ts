@@ -104,8 +104,6 @@ const enTranslations: TranslationDict = {
   "chart.low": "Low",
   "chart.volume": "Volume",
   "chart.change": "Change",
-  "chart.marketCap": "Market Cap",
-  "chart.24hVol": "24h Vol",
 
   // Token Exchange
   "tokenExchange.title": "Token Exchange",

@@ -100,8 +100,6 @@ const jaTranslations: TranslationDict = {
   'chart.low': '安値',
   'chart.volume': '取引量',
   'chart.change': '変動率',
-  'chart.marketCap': '時価総額',
-  'chart.24hVol': '24時間取引量',
 
   // Token Exchange
   'tokenExchange.title': 'トークン交換',

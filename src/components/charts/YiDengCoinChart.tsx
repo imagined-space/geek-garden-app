@@ -12,18 +12,34 @@ import {
   CandlestickData,
   HistogramData,
   LineData,
+  MouseEventParams,
+  Time,
 } from 'lightweight-charts';
 import { GeckoTerminalResponse, CoinDataPoint } from '@/types/yd-coin-chart';
-import { useLanguage } from '@/components/language/Context';
+import ChartTooltip from './Tooltip'; // 导入 Tooltip 组件
 
 const YiDengCoinChart = () => {
-  const { t } = useLanguage();
   const [data, setData] = useState<CoinDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'candle' | 'line' | 'volume'>('candle');
+
+  // 添加Tooltip相关状态
+  const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
+  const [tooltipPoint, setTooltipPoint] = useState<CoinDataPoint | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 添加代币元数据状态
+  const [baseToken, setBaseToken] = useState<{ name: string; symbol: string }>({
+    name: '',
+    symbol: '',
+  });
+  const [quoteToken, setQuoteToken] = useState<{ name: string; symbol: string }>({
+    name: '',
+    symbol: '',
+  });
 
   // 引用容器和图表
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +53,14 @@ const YiDengCoinChart = () => {
 
   // 时间周期选择
   const [timeframe, setTimeframe] = useState<'5m' | '15m' | '1h' | '4h' | '1d'>('1d');
+
+  // 根据时间戳查找对应的数据点
+  const findDataPointByTime = (time: Time | undefined): CoinDataPoint | null => {
+    if (!time || typeof time !== 'number' || data.length === 0) return null;
+
+    const timestamp = time as UTCTimestamp;
+    return data.find(item => item.time === timestamp) || null;
+  };
 
   // 从 GeckoTerminal API 获取数据
   useEffect(() => {
@@ -89,6 +113,18 @@ const YiDengCoinChart = () => {
         }
 
         const json: GeckoTerminalResponse = await response.json();
+
+        // 设置代币元数据
+        if (json.meta) {
+          setBaseToken({
+            name: json.meta.base.name || '',
+            symbol: json.meta.base.symbol || '',
+          });
+          setQuoteToken({
+            name: json.meta.quote.name || '',
+            symbol: json.meta.quote.symbol || '',
+          });
+        }
 
         // 解析数据
         const candleData: CoinDataPoint[] = json.data.attributes.ohlcv_list.map(item => ({
@@ -195,6 +231,10 @@ const YiDengCoinChart = () => {
     setData(mockData);
     setCurrentPrice(mockData.length > 0 ? mockData[mockData.length - 1].close : null);
     setPriceChange(-12.43); // 模拟价格变化
+
+    // 设置模拟的代币元数据
+    setBaseToken({ name: 'YiDeng Coin', symbol: 'YDC' });
+    setQuoteToken({ name: 'US Dollar', symbol: 'USD' });
   };
 
   // 初始化图表
@@ -231,6 +271,7 @@ const YiDengCoinChart = () => {
         width: chartContainerRef.current.clientWidth,
         height: 400,
       });
+
       // 创建蜡烛图系列
       candleSeriesRef.current = chartRef.current.addSeries(CandlestickSeries, {
         upColor: '#01b574',
@@ -240,6 +281,7 @@ const YiDengCoinChart = () => {
         wickDownColor: '#f23645',
         wickUpColor: '#01b574',
       });
+
       // 创建成交量系列
       volumeSeriesRef.current = chartRef.current.addSeries(HistogramSeries, {
         color: '#555555',
@@ -248,6 +290,7 @@ const YiDengCoinChart = () => {
         },
         priceScaleId: '', // 与主图表分离
       });
+
       // 创建线图系列
       lineSeriesRef.current = chartRef.current.addSeries(LineSeries, {
         color: '#05d9e8',
@@ -279,9 +322,9 @@ const YiDengCoinChart = () => {
     }
   }, []);
 
-  // 更新图表数据
+  // 在数据或图表模式改变时更新图表数据与显示
   useEffect(() => {
-    if (data.length > 0) {
+    if (data.length > 0 && chartRef.current) {
       // 对数据按时间戳进行排序
       const sortedData = [...data].sort((a, b) => a.time - b.time);
 
@@ -321,30 +364,70 @@ const YiDengCoinChart = () => {
       }
 
       // 根据视图模式显示/隐藏相应的系列
-      if (chartRef.current) {
-        switch (viewMode) {
-          case 'candle':
-            if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: true });
-            if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
-            if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
-            break;
+      switch (viewMode) {
+        case 'candle':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: true });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
 
-          case 'line':
-            if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
-            if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: true });
-            if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: false });
-            break;
+        case 'line':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: true });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: false });
+          break;
 
-          case 'volume':
-            if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
-            if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
-            if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
-            break;
+        case 'volume':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
+      }
+
+      // 调整时间比例以显示所有数据
+      chartRef.current.timeScale().fitContent();
+
+      // 设置鼠标事件处理程序 - 在数据加载完成后才设置
+      const crosshairMoveHandler = (param: MouseEventParams) => {
+        if (!param.point || param.time === undefined) {
+          // 如果鼠标移出图表区域或没有有效数据点，隐藏tooltip
+          if (!chartContainerRef.current?.contains(document.activeElement)) {
+            setTooltipVisible(false);
+          }
+          return;
         }
 
-        // 调整时间比例以显示所有数据
-        chartRef.current.timeScale().fitContent();
-      }
+        // 获取对应的数据点
+        const dataPoint = findDataPointByTime(param.time);
+
+        if (dataPoint) {
+          // 更新tooltip数据和位置
+          setTooltipPoint(dataPoint);
+
+          // 获取图表容器的位置信息
+          const x = param.point.x;
+          const y = param.point.y - 10; // 向上偏移一点，避免遮挡鼠标
+
+          setTooltipPosition({ x, y });
+          setTooltipVisible(true);
+        } else {
+          setTooltipVisible(false);
+        }
+      };
+
+      chartRef.current.subscribeCrosshairMove(crosshairMoveHandler);
+
+      // 鼠标离开图表区域时隐藏tooltip
+      const handleMouseLeave = () => {
+        setTooltipVisible(false);
+      };
+
+      chartContainerRef.current?.addEventListener('mouseleave', handleMouseLeave);
+
+      return () => {
+        chartContainerRef.current?.removeEventListener('mouseleave', handleMouseLeave);
+        chartRef.current?.unsubscribeCrosshairMove(crosshairMoveHandler);
+      };
     }
   }, [data, viewMode]);
 
@@ -384,6 +467,18 @@ const YiDengCoinChart = () => {
         minHeight: '500px',
       }}
     >
+      {/* Tooltip 组件 */}
+      {tooltipVisible && tooltipPoint && (
+        <ChartTooltip
+          point={tooltipPoint}
+          visible={tooltipVisible}
+          x={tooltipPosition.x}
+          y={tooltipPosition.y}
+          baseSymbol={baseToken.symbol}
+          quoteSymbol={quoteToken.symbol}
+        />
+      )}
+
       <div className="flex justify-between items-center mb-2">
         <h3
           className="cyberpunk-title text-xl"
@@ -429,7 +524,7 @@ const YiDengCoinChart = () => {
       <div className="text-xs text-gray-400 mb-2">
         <div className="flex justify-between">
           <span className="text-neon-blue">
-            {currentDate} • ${currentPrice ? currentPrice.toFixed(2) : '0.00'}
+            {currentDate} • ${currentPrice ? currentPrice.toFixed(5) : '0.00000'}
           </span>
           <span className="text-neon-green">
             24h:
@@ -459,20 +554,9 @@ const YiDengCoinChart = () => {
           borderRadius: '8px',
           height: '400px',
           width: '100%',
+          position: 'relative', // 为了正确定位 tooltip
         }}
       />
-
-      {/* 价格指标 */}
-      <div className="mt-2 flex space-x-4 justify-end">
-        <div className="text-xs">
-          <span className="text-gray-400">{t('chart.marketCap')}: </span>
-          <span className="text-neon-green">$45.2M</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-gray-400">{t('chart.24hVol')}: </span>
-          <span className="text-neon-blue">$3.8M</span>
-        </div>
-      </div>
     </div>
   );
 };

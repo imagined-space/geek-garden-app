@@ -98,8 +98,6 @@ const zhTranslations: TranslationDict = {
   "chart.low": "最低价",
   "chart.volume": "成交量",
   "chart.change": "涨跌幅",
-  "chart.marketCap": "市值",
-  "chart.24hVol": "24小时成交量",
 
   // 代币交易
   "tokenExchange.title": "代币交易",
