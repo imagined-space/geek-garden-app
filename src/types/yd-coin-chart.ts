@@ -1,36 +1,45 @@
-// 定义数据类型接口
-export interface CoinDataPoint {
-  date: string;
-  price: number;
-  open: number;
-  high: number;
-  low: number;
-  volume: number;
-}
+import { UTCTimestamp } from 'lightweight-charts';
 
-// 定义tooltip参数类型
-export interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    payload: CoinDataPoint;
-  }>;
-  label?: string;
-}
 
-// 定义鼠标事件类型
-export interface ChartMouseEvent {
-  activePayload?: Array<{
-    payload: CoinDataPoint;
-  }>;
-  activeCoordinate?: {
-    x: number;
-    y: number;
+// GeckoTerminal API 数据类型定义
+export interface GeckoTerminalResponse {
+  data: {
+    attributes: {
+      ohlcv_list: Array<[number, string, string, string, string, string]>;
+    };
+    id: string;
+    type: string;
+  };
+  meta: {
+    base: TokenInfo;
+    quote: TokenInfo;
   };
 }
 
-// 定义crosshairValues的类型
-export interface CrosshairValues {
+// 代币信息类型
+export interface TokenInfo {
+  address: string;
+  name: string;
+  symbol: string;
+  coingecko_coin_id: string;
+}
+
+// 图表数据点类型
+export interface CoinDataPoint {
+  time: UTCTimestamp;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartTooltipProps {
+  point: CoinDataPoint | null;
+  visible: boolean;
   x: number;
   y: number;
-  data: CoinDataPoint;
+  baseSymbol?: string;
+  quoteSymbol?: string;
 }
+

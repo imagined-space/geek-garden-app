@@ -99,8 +99,6 @@ const koTranslations: TranslationDict = {
   'chart.low': '저가',
   'chart.volume': '거래량',
   'chart.change': '변동률',
-  'chart.marketCap': '시가총액',
-  'chart.24hVol': '24시간 거래량',
 
   // Token Exchange
   'tokenExchange.title': '토큰 교환',
