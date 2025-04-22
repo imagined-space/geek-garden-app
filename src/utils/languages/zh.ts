@@ -91,6 +91,14 @@ const zhTranslations: TranslationDict = {
   "market.title": "模拟市场",
   "market.subtitle": "通过我们的模拟交易环境，学习加密货币市场操作，无需承担实际财务风险。跟踪实时市场数据，测试交易策略。",
   
+  // YD Coin Tooltip
+  "ydCoin.tooltip.open": "开盘",
+  "ydCoin.tooltip.high": "最高",
+  "ydCoin.tooltip.low": "最低",
+  "ydCoin.tooltip.close": "收盘",
+  "ydCoin.tooltip.volume": "成交量",
+  "ydCoin.tooltip.change": "涨跌幅",
+  
   // 图表组件
   "chart.open": "开盘价",
   "chart.close": "收盘价",

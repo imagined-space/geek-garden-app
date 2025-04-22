@@ -96,6 +96,14 @@ const enTranslations: TranslationDict = {
   // Market Page
   "market.title": "Simulation Market",
   "market.subtitle": "Learn cryptocurrency market operations through our simulation environment without financial risk. Track real-time market data and test trading strategies.",
+
+  // YD Coin Tooltip
+  "ydCoin.tooltip.open": "Open",
+  "ydCoin.tooltip.high": "High",
+  "ydCoin.tooltip.low": "Low",
+  "ydCoin.tooltip.close": "Close",
+  "ydCoin.tooltip.volume": "Volume",
+  "ydCoin.tooltip.change": "Change",
   
   // Chart Component
   "chart.open": "Open",
@@ -120,6 +128,7 @@ const enTranslations: TranslationDict = {
   "tokenExchange.confirm": "Confirm",
   "tokenExchange.confirming": "Confirming...",
   "tokenExchange.processing": "Processing...",
+
 };
 
 export default enTranslations;

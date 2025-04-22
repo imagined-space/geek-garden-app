@@ -93,6 +93,14 @@ const jaTranslations: TranslationDict = {
   'market.subtitle':
     '実際の金融リスクを負うことなく、シミュレーション環境で暗号通貨市場の操作を学びましょう。リアルタイムの市場データを追跡し、取引戦略をテストできます。',
 
+  // YD Coin Tooltip
+  'ydCoin.tooltip.open': '始値',
+  'ydCoin.tooltip.high': '高値',
+  'ydCoin.tooltip.low': '安値',
+  'ydCoin.tooltip.close': '終値',
+  'ydCoin.tooltip.volume': '出来高',
+  'ydCoin.tooltip.change': '変動率',
+
   // チャートコンポーネント
   'chart.open': '始値',
   'chart.close': '終値',

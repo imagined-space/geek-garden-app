@@ -1,10 +1,13 @@
 import React from 'react';
 import { ChartTooltipProps } from '@/types/yd-coin-chart';
+import { useLanguage } from '@components/language/Context';
 
 const ChartTooltip: React.FC<ChartTooltipProps> = ({ point, visible, x, y }) => {
   if (!visible || !point) {
     return null;
   }
+
+  const { t } = useLanguage();
 
   // 计算涨跌幅
   const priceChange = ((point.close - point.open) / point.open) * 100;
@@ -62,22 +65,22 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({ point, visible, x, y }) => 
   return (
     <div style={tooltipStyle}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-        <div>开盘:</div>
+        <div>{t('ydCoin.tooltip.open')}:</div>
         <div>{formatNumber(point.open)}</div>
 
-        <div>最高:</div>
+        <div>{t('ydCoin.tooltip.high')}:</div>
         <div>{formatNumber(point.high)}</div>
 
-        <div>最低:</div>
+        <div>{t('ydCoin.tooltip.low')}:</div>
         <div>{formatNumber(point.low)}</div>
 
-        <div>收盘:</div>
+        <div>{t('ydCoin.tooltip.close')}:</div>
         <div>{formatNumber(point.close)}</div>
 
-        <div>成交量:</div>
+        <div>{t('ydCoin.tooltip.volume')}:</div>
         <div>{formatVolume(point.volume)}</div>
 
-        <div>涨跌幅:</div>
+        <div>{t('ydCoin.tooltip.change')}:</div>
         <div style={{ color: isPositive ? '#01b574' : '#f23645' }}>
           {isPositive ? '+' : ''}
           {priceChange.toFixed(2)}%
