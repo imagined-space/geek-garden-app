@@ -107,6 +107,12 @@ const koTranslations: TranslationDict = {
   'chart.low': '저가',
   'chart.volume': '거래량',
   'chart.change': '변동률',
+  'chart.type.candle': '캔들차트',
+  'chart.type.line': '라인 차트',
+  'chart.type.volume': '거래량',
+  'chart.btn.type.candle': '캔들 차트 보기',
+  'chart.btn.type.line': '라인 차트 보기',
+  'chart.btn.type.volume': '거래량 보기',
 
   // Token Exchange
   'tokenExchange.title': '토큰 교환',

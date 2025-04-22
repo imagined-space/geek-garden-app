@@ -108,6 +108,12 @@ const jaTranslations: TranslationDict = {
   'chart.low': '安値',
   'chart.volume': '取引量',
   'chart.change': '変動率',
+  'chart.type.candle': 'ローソク足',
+  'chart.type.line': '折れ線グラフ',
+  'chart.type.volume': '取引量',
+  'chart.btn.type.candle': 'ローソク足を表示',
+  'chart.btn.type.line': 'ラインチャートを表示',
+  'chart.btn.type.volume': '出来高を表示',
 
   // Token Exchange
   'tokenExchange.title': 'トークン交換',
