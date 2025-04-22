@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useDeferredValue } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -16,15 +16,22 @@ import {
   Time,
 } from 'lightweight-charts';
 import { GeckoTerminalResponse, CoinDataPoint } from '@/types/yd-coin-chart';
+import { useLanguage } from '@/components/language/Context';
 import ChartTooltip from './Tooltip'; // 导入 Tooltip 组件
 
 const YiDengCoinChart = () => {
+  const { t } = useLanguage();
+  const [isPending, startTransition] = useTransition();
   const [data, setData] = useState<CoinDataPoint[]>([]);
+  const deferredData = useDeferredValue(data);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'candle' | 'line' | 'volume'>('candle');
+
+  // 避免不必要的重新渲染
+  const MemoizedTooltip = React.memo(ChartTooltip);
 
   // 添加Tooltip相关状态
   const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
@@ -136,20 +143,23 @@ const YiDengCoinChart = () => {
           volume: parseFloat(item[5]), // 成交量
         }));
 
-        setData(candleData);
+        // 使用 startTransition 包装状态更新，减少渲染阻塞
+        startTransition(() => {
+          setData(candleData);
 
-        // 设置当前价格和价格变化
-        if (candleData.length > 0) {
-          const latestData = candleData[candleData.length - 1];
-          setCurrentPrice(latestData.close);
+          // 设置当前价格和价格变化
+          if (candleData.length > 0) {
+            const latestData = candleData[candleData.length - 1];
+            setCurrentPrice(latestData.close);
 
-          // 计算24小时变化率
-          if (candleData.length > 1) {
-            const previousData = candleData[candleData.length - 2];
-            const change = ((latestData.close - previousData.close) / previousData.close) * 100;
-            setPriceChange(change);
+            // 计算24小时变化率
+            if (candleData.length > 1) {
+              const previousData = candleData[candleData.length - 2];
+              const change = ((latestData.close - previousData.close) / previousData.close) * 100;
+              setPriceChange(change);
+            }
           }
-        }
+        });
       } catch (err) {
         console.error('获取数据失败:', err);
         setError(err instanceof Error ? err.message : '未知错误');
@@ -245,6 +255,7 @@ const YiDengCoinChart = () => {
         layout: {
           background: { color: '#0a0b1e' },
           textColor: '#8884d8',
+          attributionLogo: false,
         },
         grid: {
           vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
@@ -324,9 +335,9 @@ const YiDengCoinChart = () => {
 
   // 在数据或图表模式改变时更新图表数据与显示
   useEffect(() => {
-    if (data.length > 0 && chartRef.current) {
+    if (deferredData.length > 0 && chartRef.current) {
       // 对数据按时间戳进行排序
-      const sortedData = [...data].sort((a, b) => a.time - b.time);
+      const sortedData = [...deferredData].sort((a, b) => a.time - b.time);
 
       // 准备蜡烛图数据
       const candleData: CandlestickData[] = sortedData.map(item => ({
@@ -429,7 +440,7 @@ const YiDengCoinChart = () => {
         chartRef.current?.unsubscribeCrosshairMove(crosshairMoveHandler);
       };
     }
-  }, [data, viewMode]);
+  }, [deferredData, viewMode]);
 
   // 处理图表模式切换的函数
   const toggleChartMode = (): void => {
@@ -444,11 +455,11 @@ const YiDengCoinChart = () => {
   const getChartModeText = (): string => {
     switch (viewMode) {
       case 'candle':
-        return '折线图';
+        return t('chart.btn.type.line');
       case 'line':
-        return '成交量';
+        return t('chart.btn.type.volume');
       default:
-        return 'K线图';
+        return t('chart.btn.type.candle');
     }
   };
 
@@ -469,7 +480,7 @@ const YiDengCoinChart = () => {
     >
       {/* Tooltip 组件 */}
       {tooltipVisible && tooltipPoint && (
-        <ChartTooltip
+        <MemoizedTooltip
           point={tooltipPoint}
           visible={tooltipVisible}
           x={tooltipPosition.x}
@@ -481,7 +492,7 @@ const YiDengCoinChart = () => {
 
       <div className="flex justify-between items-center mb-2">
         <h3
-          className="cyberpunk-title text-xl"
+          className="cyberpunk-title text-xl mr-2"
           style={{
             background: 'linear-gradient(to right, #05d9e8, #c16ecf)',
             WebkitBackgroundClip: 'text',
@@ -489,7 +500,13 @@ const YiDengCoinChart = () => {
             fontWeight: 'bold',
           }}
         >
-          YIDENG COIN
+          {/* 显示当前图表类型 */}
+          YIDENG COIN{' '}
+          {viewMode === 'candle'
+            ? t('chart.type.candle')
+            : viewMode === 'line'
+              ? t('chart.type.line')
+              : t('chart.type.volume')}
         </h3>
         <div className="flex space-x-2">
           {/* 时间周期选择按钮 */}
@@ -537,7 +554,7 @@ const YiDengCoinChart = () => {
       </div>
 
       {/* 加载状态 */}
-      {isLoading && (
+      {(isPending || isLoading) && (
         <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
           <div className="text-neon-blue">加载中...</div>
         </div>

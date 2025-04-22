@@ -93,6 +93,14 @@ const jaTranslations: TranslationDict = {
   'market.subtitle':
     '実際の金融リスクを負うことなく、シミュレーション環境で暗号通貨市場の操作を学びましょう。リアルタイムの市場データを追跡し、取引戦略をテストできます。',
 
+  // YD Coin Tooltip
+  'ydCoin.tooltip.open': '始値',
+  'ydCoin.tooltip.high': '高値',
+  'ydCoin.tooltip.low': '安値',
+  'ydCoin.tooltip.close': '終値',
+  'ydCoin.tooltip.volume': '出来高',
+  'ydCoin.tooltip.change': '変動率',
+
   // チャートコンポーネント
   'chart.open': '始値',
   'chart.close': '終値',
@@ -100,6 +108,12 @@ const jaTranslations: TranslationDict = {
   'chart.low': '安値',
   'chart.volume': '取引量',
   'chart.change': '変動率',
+  'chart.type.candle': 'ローソク足',
+  'chart.type.line': '折れ線グラフ',
+  'chart.type.volume': '取引量',
+  'chart.btn.type.candle': 'ローソク足を表示',
+  'chart.btn.type.line': 'ラインチャートを表示',
+  'chart.btn.type.volume': '出来高を表示',
 
   // Token Exchange
   'tokenExchange.title': 'トークン交換',

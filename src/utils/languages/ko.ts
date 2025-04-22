@@ -92,6 +92,14 @@ const koTranslations: TranslationDict = {
   'market.subtitle':
     '실제 재정적 위험 없이 시뮬레이션 환경에서 암호화폐 시장 운영을 배우세요. 실시간 시장 데이터를 추적하고 거래 전략을 테스트해보세요.',
 
+  // YD Coin Tooltip
+  'ydCoin.tooltip.open': '시가',
+  'ydCoin.tooltip.high': '고가',
+  'ydCoin.tooltip.low': '저가',
+  'ydCoin.tooltip.close': '종가',
+  'ydCoin.tooltip.volume': '거래량',
+  'ydCoin.tooltip.change': '변동률',
+
   // 차트 컴포넌트
   'chart.open': '시가',
   'chart.close': '종가',
@@ -99,6 +107,12 @@ const koTranslations: TranslationDict = {
   'chart.low': '저가',
   'chart.volume': '거래량',
   'chart.change': '변동률',
+  'chart.type.candle': '캔들차트',
+  'chart.type.line': '라인 차트',
+  'chart.type.volume': '거래량',
+  'chart.btn.type.candle': '캔들 차트 보기',
+  'chart.btn.type.line': '라인 차트 보기',
+  'chart.btn.type.volume': '거래량 보기',
 
   // Token Exchange
   'tokenExchange.title': '토큰 교환',
