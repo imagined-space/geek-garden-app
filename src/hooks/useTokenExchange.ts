@@ -12,7 +12,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { sepolia } from 'wagmi/chains';
 import { getContractAddress } from '@/config/contracts';
-import YiDengTokenABI from '@/contracts/abis/YiDengToken.json';
+import GeekTokenABI from '@/contracts/abis/GeekToken.json';
 
 export const useTokenExchange = () => {
   const { address, isConnected } = useAccount();
@@ -22,7 +22,7 @@ export const useTokenExchange = () => {
   const [isBuying, setIsBuying] = useState(true);
 
   // 获取当前网络的合约地址
-  const contractAddress = chainId ? getContractAddress(chainId).YIDENG_TOKEN : null;
+  const contractAddress = chainId ? getContractAddress(chainId).GEEK_TOKEN : null;
 
   // 获取用户 ETH 余额
   const { data: ethBalanceData, refetch: refetchEthBalance } = useBalance({ address });
@@ -33,7 +33,7 @@ export const useTokenExchange = () => {
   // 读取 YiDeng 代币余额
   const { data: ydBalance, refetch: refetchYdBalance } = useReadContract({
     address: contractAddress as `0x${string}`,
-    abi: YiDengTokenABI.abi,
+    abi: GeekTokenABI.abi,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
   });
@@ -41,7 +41,7 @@ export const useTokenExchange = () => {
   // 读取代币兑换比率（暂未使用）
   const { data } = useReadContract({
     address: contractAddress as `0x${string}`,
-    abi: YiDengTokenABI.abi,
+    abi: GeekTokenABI.abi,
     functionName: 'TOKENS_PER_ETH',
   });
 
@@ -87,10 +87,10 @@ export const useTokenExchange = () => {
 
     try {
       if (isBuying) {
-        // 购买YD代币
+        // 购买G代币
         await writeContract({
           address: contractAddress as `0x${string}`,
-          abi: YiDengTokenABI.abi,
+          abi: GeekTokenABI.abi,
           functionName: 'buyWithETH',
           value: parseEther(amount),
         });
@@ -101,14 +101,14 @@ export const useTokenExchange = () => {
         const amountToSell = BigInt(amount);
 
         if (userBalance < amountToSell) {
-          toast.error(`YD代币余额不足，当前余额: ${userBalance.toString()} YD`);
+          toast.error(`G代币余额不足，当前余额: ${userBalance.toString()} G`);
           return;
         }
 
-        // 出售YD代币
+        // 出售G代币
         await writeContract({
           address: contractAddress as `0x${string}`,
-          abi: YiDengTokenABI.abi,
+          abi: GeekTokenABI.abi,
           functionName: 'sellTokens',
           args: [amountToSell],
         });
