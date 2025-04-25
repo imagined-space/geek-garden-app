@@ -233,7 +233,7 @@ const YiDengCoinChart = () => {
     setPriceChange(-12.43); // 模拟价格变化
 
     // 设置模拟的代币元数据
-    setBaseToken({ name: 'YiDeng Coin', symbol: 'YDC' });
+    setBaseToken({ name: 'YiDeng Coin', symbol: 'GC' });
     setQuoteToken({ name: 'US Dollar', symbol: 'USD' });
   };
 
