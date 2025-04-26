@@ -31,9 +31,7 @@ const nextConfig: NextConfig = {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    unoptimized: true, // Cloudflare Pages需要
   },
-  output: 'standalone', // 添加output配置用于Cloudflare部署
 
   // 改进的Webpack配置
   webpack: (config, { dev }) => {
