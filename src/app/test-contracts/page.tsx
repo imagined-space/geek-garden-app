@@ -401,7 +401,7 @@ const ContractTestPage = () => {
       setError('请先连接钱包并输入Web2课程ID');
       return;
     }
-    let web2CourseId = '1';
+    const web2CourseId = '1';
 
     setLoading(true);
     setError('');
@@ -545,8 +545,8 @@ const ContractTestPage = () => {
       setError('请先输入市场合约地址、Web2课程ID和学生地址');
       return;
     }
-    let web2CourseId = '1';
-    let studentAddress = account;
+    const web2CourseId = '1';
+    const studentAddress = account;
     console.log('web2CourseId', web2CourseId);
     console.log('studentAddress', studentAddress);
 

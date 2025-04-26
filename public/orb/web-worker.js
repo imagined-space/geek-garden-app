@@ -1,11 +1,7 @@
-// 定义消息类型
-type WorkerMessage = {
-  type: 'calculateParticles' | 'calculateNoise' | 'calculateHueAdjustment';
-  data: any;
-};
+
 
 // 粒子计算函数
-function calculateParticles(count: number) {
+function calculateParticles(count) {
   return Array.from({ length: count }).map(() => ({
     size: Math.random() * 12 + 3,
     distance: Math.random() * 120 + 30,
@@ -18,7 +14,7 @@ function calculateParticles(count: number) {
 }
 
 // 预计算颜色调整
-function calculateHueAdjustment(baseColors: number[][], hue: number) {
+function calculateHueAdjustment(baseColors, hue) {
   // 简化的色相调整逻辑
   const adjustedColors = baseColors.map(color => {
     const hueRad = (hue * Math.PI) / 180.0;
@@ -44,7 +40,7 @@ function calculateHueAdjustment(baseColors: number[][], hue: number) {
 }
 
 // 处理主线程消息
-self.onmessage = (event: MessageEvent<WorkerMessage>) => {
+self.onmessage = (event) => {
   const { type, data } = event.data;
 
   switch (type) {
