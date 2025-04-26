@@ -34,10 +34,6 @@ export default function Orb({
 }: OrbProps) {
   const ctnDom = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
-  // 性能监控
-  const [fps, setFps] = useState(0);
-  const frameCount = useRef(0);
-  const lastFpsUpdate = useRef(0);
 
   // 粒子和颜色状态 - 由 Worker 计算
   const webWorkerRef = useRef<Worker | null>(null);
@@ -200,30 +196,6 @@ export default function Orb({
       const now = performance.now();
       const timeSinceLastFrame = now - lastTime;
 
-      // 计算 FPS - 仅在开发模式下
-      if (process.env.NODE_ENV === 'development') {
-        frameCount.current += 1;
-        if (t - lastFpsUpdate.current >= 1000) {
-          // 每秒更新一次
-          setFps(frameCount.current);
-          frameCount.current = 0;
-          lastFpsUpdate.current = t;
-
-          // 动态调整跳帧阈值
-          if (frameCount.current < 40) {
-            adaptiveFrameskip.current.skipThreshold = Math.min(
-              adaptiveFrameskip.current.skipThreshold + 1,
-              5,
-            );
-          } else if (frameCount.current > 55) {
-            adaptiveFrameskip.current.skipThreshold = Math.max(
-              adaptiveFrameskip.current.skipThreshold - 1,
-              0,
-            );
-          }
-        }
-      }
-
       // 自适应帧跳过：如果帧时间短于目标且不在交互状态
       adaptiveFrameskip.current.skipCounter += 1;
       if (
@@ -360,13 +332,6 @@ export default function Orb({
 
   return (
     <div ref={ctnDom} className="w-full h-full relative">
-      {/* 在开发模式下显示 FPS */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-0 right-0 bg-black bg-opacity-50 text-white px-2 py-1 z-50">
-          {fps} FPS
-        </div>
-      )}
-
       {/* 添加居中的文字层 */}
       <div
         className="absolute inset-0 flex items-center justify-center z-10"
