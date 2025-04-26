@@ -42,15 +42,7 @@ export default [
       'tailwind.config.js',
       'postcss.config.js',
       'eslint.config.js', // 添加对当前配置文件的忽略
-      '.eslintrc.js', // 添加对可能存在的旧配置文件的忽略
-      // 忽略可能有问题的文件
-      'src/types/ethers-contracts/**',
-      'src/app/test-contracts/page.tsx',
-      'src/components/wallet/**/*.tsx',
-      'src/hooks/useDepositContract.ts',
-      'src/hooks/useSMToken.ts',
-      'src/hooks/useWallet.ts',
-      'src/hooks/useWeb3Login.ts',
+      '.eslintrc.js', // 添加对可能存在的旧配置文件的忽略˝
     ],
   },
   {
@@ -137,9 +129,6 @@ export default [
 
       // 解决Next.js Image组件问题的规则
       '@next/next/no-img-element': 'off', // 禁用img标签检查
-
-      // 箭头函数体风格规则
-      'arrow-body-style': 'as-needed', 
     },
   },
 ];

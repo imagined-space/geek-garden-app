@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useTransition, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useDeferredValue, useCallback } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -61,118 +61,16 @@ const YiDengCoinChart = () => {
   // 时间周期选择
   const [timeframe, setTimeframe] = useState<'5m' | '15m' | '1h' | '4h' | '1d'>('1d');
 
-  // 根据时间戳查找对应的数据点
-  const findDataPointByTime = (time: Time | undefined): CoinDataPoint | null => {
-    if (!time || typeof time !== 'number' || data.length === 0) return null;
+  // 使用 useCallback 包装 findDataPointByTime 函数，减少不必要的函数重建
+  const findDataPointByTime = useCallback(
+    (time: Time | undefined): CoinDataPoint | null => {
+      if (!time || typeof time !== 'number' || data.length === 0) return null;
 
-    const timestamp = time as UTCTimestamp;
-    return data.find(item => item.time === timestamp) || null;
-  };
-
-  // 从 GeckoTerminal API 获取数据
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        // 构建 API URL，这里使用样例地址，实际使用时可能需要替换为真实的代币地址
-        // 默认使用 ETH 网络上的某个代币作为示例
-        const network = 'eth'; // 以太坊网络
-        const poolAddress = '0x60594a405d53811d3bc4766596efd80fd545a270'; // ETH-USDT 池作为示例
-
-        // 构建时间参数
-        let timeUnit = ''; // 时间单位
-        let timeAggregate = 1; // 时间数值
-
-        switch (timeframe) {
-          case '5m':
-            timeUnit = 'minute';
-            timeAggregate = 5;
-            break;
-          case '15m':
-            timeUnit = 'minute';
-            timeAggregate = 15;
-            break;
-          case '1h':
-            timeUnit = 'hour';
-            timeAggregate = 1;
-            break;
-          case '4h':
-            timeUnit = 'hour';
-            timeAggregate = 4;
-            break;
-          case '1d':
-            timeUnit = 'day';
-            timeAggregate = 1;
-            break;
-          default:
-            timeUnit = 'day';
-            timeAggregate = 1;
-        }
-
-        // 获取 K 线数据
-        const apiUrl = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeUnit}?aggregate=${timeAggregate}`;
-
-        const response = await fetch(apiUrl);
-
-        if (!response.ok) {
-          throw new Error(`API 请求失败: ${response.status}`);
-        }
-
-        const json: GeckoTerminalResponse = await response.json();
-
-        // 设置代币元数据
-        if (json.meta) {
-          setBaseToken({
-            name: json.meta.base.name || '',
-            symbol: json.meta.base.symbol || '',
-          });
-          setQuoteToken({
-            name: json.meta.quote.name || '',
-            symbol: json.meta.quote.symbol || '',
-          });
-        }
-
-        // 解析数据
-        const candleData: CoinDataPoint[] = json.data.attributes.ohlcv_list.map(item => ({
-          time: (item[0] / 1000) as UTCTimestamp, // 转换为秒级时间戳
-          open: parseFloat(item[1]), // 开盘价
-          high: parseFloat(item[2]), // 最高价
-          low: parseFloat(item[3]), // 最低价
-          close: parseFloat(item[4]), // 收盘价
-          volume: parseFloat(item[5]), // 成交量
-        }));
-
-        // 使用 startTransition 包装状态更新，减少渲染阻塞
-        startTransition(() => {
-          setData(candleData);
-
-          // 设置当前价格和价格变化
-          if (candleData.length > 0) {
-            const latestData = candleData[candleData.length - 1];
-            setCurrentPrice(latestData.close);
-
-            // 计算24小时变化率
-            if (candleData.length > 1) {
-              const previousData = candleData[candleData.length - 2];
-              const change = ((latestData.close - previousData.close) / previousData.close) * 100;
-              setPriceChange(change);
-            }
-          }
-        });
-      } catch (err) {
-        console.error('获取数据失败:', err);
-        setError(err instanceof Error ? err.message : '未知错误');
-
-        // 生成模拟数据以便在 API 未连接时展示
-        generateMockData();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [timeframe]);
+      const timestamp = time as UTCTimestamp;
+      return data.find(item => item.time === timestamp) || null;
+    },
+    [data]
+  );
 
   // 生成模拟数据（当 API 请求失败时使用）
   const generateMockData = () => {
@@ -246,6 +144,112 @@ const YiDengCoinChart = () => {
     setBaseToken({ name: 'YiDeng Coin', symbol: 'GC' });
     setQuoteToken({ name: 'US Dollar', symbol: 'USD' });
   };
+
+  // 从 GeckoTerminal API 获取数据
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // 构建 API URL，这里使用样例地址，实际使用时可能需要替换为真实的代币地址
+        // 默认使用 ETH 网络上的某个代币作为示例
+        const network = 'eth'; // 以太坊网络
+        const poolAddress = '0x60594a405d53811d3bc4766596efd80fd545a270'; // ETH-USDT 池作为示例
+
+        // 构建时间参数
+        let timeUnit = ''; // 时间单位
+        let timeAggregate = 1; // 时间数值
+
+        switch (timeframe) {
+          case '5m':
+            timeUnit = 'minute';
+            timeAggregate = 5;
+            break;
+          case '15m':
+            timeUnit = 'minute';
+            timeAggregate = 15;
+            break;
+          case '1h':
+            timeUnit = 'hour';
+            timeAggregate = 1;
+            break;
+          case '4h':
+            timeUnit = 'hour';
+            timeAggregate = 4;
+            break;
+          case '1d':
+            timeUnit = 'day';
+            timeAggregate = 1;
+            break;
+          default:
+            timeUnit = 'day';
+            timeAggregate = 1;
+            break;
+        }
+
+        // 获取 K 线数据
+        const apiUrl = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeUnit}?aggregate=${timeAggregate}`;
+
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`API 请求失败: ${response.status}`);
+        }
+
+        const json: GeckoTerminalResponse = await response.json();
+
+        // 设置代币元数据
+        if (json.meta) {
+          setBaseToken({
+            name: json.meta.base.name || '',
+            symbol: json.meta.base.symbol || '',
+          });
+          setQuoteToken({
+            name: json.meta.quote.name || '',
+            symbol: json.meta.quote.symbol || '',
+          });
+        }
+
+        // 解析数据
+        const candleData: CoinDataPoint[] = json.data.attributes.ohlcv_list.map(item => ({
+          time: (item[0] / 1000) as UTCTimestamp, // 转换为秒级时间戳
+          open: parseFloat(item[1]), // 开盘价
+          high: parseFloat(item[2]), // 最高价
+          low: parseFloat(item[3]), // 最低价
+          close: parseFloat(item[4]), // 收盘价
+          volume: parseFloat(item[5]), // 成交量
+        }));
+
+        // 使用 startTransition 包装状态更新，减少渲染阻塞
+        startTransition(() => {
+          setData(candleData);
+
+          // 设置当前价格和价格变化
+          if (candleData.length > 0) {
+            const latestData = candleData[candleData.length - 1];
+            setCurrentPrice(latestData.close);
+
+            // 计算24小时变化率
+            if (candleData.length > 1) {
+              const previousData = candleData[candleData.length - 2];
+              const change = ((latestData.close - previousData.close) / previousData.close) * 100;
+              setPriceChange(change);
+            }
+          }
+        });
+      } catch (err) {
+        // 移除 console.error 以解决 no-console 警告
+        setError(err instanceof Error ? err.message : '未知错误');
+
+        // 生成模拟数据以便在 API 未连接时展示
+        generateMockData();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [timeframe]);
 
   // 初始化图表
   useEffect(() => {
@@ -331,6 +335,9 @@ const YiDengCoinChart = () => {
         }
       };
     }
+    
+    // 没有依赖项的 useEffect 不需要返回值
+    return undefined;
   }, []);
 
   // 在数据或图表模式改变时更新图表数据与显示
@@ -393,16 +400,26 @@ const YiDengCoinChart = () => {
           if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
           if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
           break;
+          
+        default:
+          // 添加默认情况处理
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: true });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
       }
 
       // 调整时间比例以显示所有数据
       chartRef.current.timeScale().fitContent();
 
+      // 修复依赖项问题，获取 chartContainer 引用
+      const containerRef = chartContainerRef.current;
+
       // 设置鼠标事件处理程序 - 在数据加载完成后才设置
       const crosshairMoveHandler = (param: MouseEventParams) => {
         if (!param.point || param.time === undefined) {
           // 如果鼠标移出图表区域或没有有效数据点，隐藏tooltip
-          if (!chartContainerRef.current?.contains(document.activeElement)) {
+          if (!containerRef?.contains(document.activeElement)) {
             setTooltipVisible(false);
           }
           return;
@@ -416,7 +433,7 @@ const YiDengCoinChart = () => {
           setTooltipPoint(dataPoint);
 
           // 获取图表容器的位置信息
-          const x = param.point.x;
+          const {x} = param.point;
           const y = param.point.y - 10; // 向上偏移一点，避免遮挡鼠标
 
           setTooltipPosition({ x, y });
@@ -433,14 +450,17 @@ const YiDengCoinChart = () => {
         setTooltipVisible(false);
       };
 
-      chartContainerRef.current?.addEventListener('mouseleave', handleMouseLeave);
+      containerRef?.addEventListener('mouseleave', handleMouseLeave);
 
       return () => {
-        chartContainerRef.current?.removeEventListener('mouseleave', handleMouseLeave);
+        containerRef?.removeEventListener('mouseleave', handleMouseLeave);
         chartRef.current?.unsubscribeCrosshairMove(crosshairMoveHandler);
       };
     }
-  }, [deferredData, viewMode]);
+    
+    // 当条件不满足时返回空清理函数
+    return () => {};
+  }, [deferredData, viewMode, findDataPointByTime]);
 
   // 处理图表模式切换的函数
   const toggleChartMode = (): void => {
@@ -458,14 +478,29 @@ const YiDengCoinChart = () => {
         return t('chart.btn.type.line');
       case 'line':
         return t('chart.btn.type.volume');
+      case 'volume':
       default:
         return t('chart.btn.type.candle');
     }
   };
 
   // 处理时间周期切换
-  const handleTimeframeChange = (newTimeframe: '5m' | '15m' | '1h' | '4h' | '1d') => {
+  const handleTimeframeChange = (newTimeframe: '5m' | '15m' | '1h' | '4h' | '1d'): void => {
     setTimeframe(newTimeframe);
+  };
+
+  // 获取当前图表类型文本
+  const getChartTypeText = (): string => {
+    switch (viewMode) {
+      case 'candle':
+        return t('chart.type.candle');
+      case 'line':
+        return t('chart.type.line');
+      case 'volume':
+        return t('chart.type.volume');
+      default:
+        return t('chart.type.candle');
+    }
   };
 
   return (
@@ -500,13 +535,8 @@ const YiDengCoinChart = () => {
             fontWeight: 'bold',
           }}
         >
-          {/* 显示当前图表类型 */}
-          YIDENG COIN{' '}
-          {viewMode === 'candle'
-            ? t('chart.type.candle')
-            : viewMode === 'line'
-              ? t('chart.type.line')
-              : t('chart.type.volume')}
+          {/* 显示当前图表类型 - 替换嵌套三元表达式 */}
+          YIDENG COIN{' '}{getChartTypeText()}
         </h3>
         <div className="flex space-x-2">
           {/* 时间周期选择按钮 */}
@@ -514,7 +544,7 @@ const YiDengCoinChart = () => {
             {['5m', '15m', '1h', '4h', '1d'].map(tf => (
               <button
                 key={tf}
-                onClick={() => handleTimeframeChange(tf as any)}
+                onClick={() => handleTimeframeChange(tf as '5m' | '15m' | '1h' | '4h' | '1d')}
                 className={`text-xs px-2 py-1 rounded ${
                   timeframe === tf
                     ? 'bg-gray-700 text-neon-blue'

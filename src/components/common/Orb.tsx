@@ -12,6 +12,17 @@ interface OrbProps {
   textSize?: string;
 }
 
+// 为粒子定义明确的类型而不是any
+interface Particle {
+  size: number;
+  distance: number;
+  duration: number;
+  opacity: number;
+  delay: number;
+  direction: number;
+  color: number;
+}
+
 export default function Orb({
   hue = 0,
   hoverIntensity = 0.2,
@@ -30,10 +41,10 @@ export default function Orb({
 
   // 粒子和颜色状态 - 由 Worker 计算
   const webWorkerRef = useRef<Worker | null>(null);
-  const [particles, setParticles] = useState<any[]>([]);
+  const [particles, setParticles] = useState<Particle[]>([]); // 使用正确的类型
   const [adjustedColors, setAdjustedColors] = useState<number[][]>([]);
   const lastHue = useRef(hue);
-  
+
   // 提前创建预计算的颜色 uniform
   const precomputedColorsRef = useRef(new Float32Array(9));
   const resolutionVec = useRef(new Vec3());
@@ -54,79 +65,65 @@ export default function Orb({
     }),
     [],
   );
-
-  // 初始化 Web Worker
   useEffect(() => {
-    // 确保只在客户端创建 Web Worker
+    // 确保只在客户端创建Web Worker
     if (typeof window !== 'undefined') {
-      webWorkerRef.current = new Worker(new URL('@/utils/orb/web-worker.ts', import.meta.url), {
-        type: 'module',
-      });
+      // 只有在webWorker不存在时才初始化
+      if (!webWorkerRef.current) {
+        webWorkerRef.current = new Worker('/orb/web-worker.js', {
+          type: 'module',
+        });
 
-      // 监听 Worker 的消息
-      webWorkerRef.current.onmessage = event => {
-        const { type, data } = event.data;
+        // 监听Worker的消息
+        webWorkerRef.current.onmessage = event => {
+          const { type, data } = event.data;
 
-        if (type === 'particles') {
-          setParticles(data);
-        } else if (type === 'hueAdjustment') {
-          setAdjustedColors(data.colors);
-          lastHue.current = data.hue;
-        }
-      };
+          if (type === 'particles') {
+            setParticles(data);
+          } else if (type === 'hueAdjustment') {
+            setAdjustedColors(data.colors);
+            lastHue.current = data.hue;
+          }
+        };
 
-      // 请求初始粒子数据
-      webWorkerRef.current.postMessage({
-        type: 'calculateParticles',
-        data: { count: 20 },
-      });
+        // 请求初始粒子数据
+        webWorkerRef.current.postMessage({
+          type: 'calculateParticles',
+          data: { count: 20 },
+        });
+      }
 
-      // 请求初始色相调整
-      webWorkerRef.current.postMessage({
-        type: 'calculateHueAdjustment',
-        data: {
-          baseColors: [
-            [0.611765, 0.262745, 0.996078],
-            [0.298039, 0.760784, 0.913725],
-            [0.062745, 0.078431, 0.6],
-          ],
-          hue,
-        },
-      });
+      // 当hue变化时或初始化时，请求色相调整
+      if (webWorkerRef.current && hue !== lastHue.current) {
+        webWorkerRef.current.postMessage({
+          type: 'calculateHueAdjustment',
+          data: {
+            baseColors: [
+              [0.611765, 0.262745, 0.996078],
+              [0.298039, 0.760784, 0.913725],
+              [0.062745, 0.078431, 0.6],
+            ],
+            hue,
+          },
+        });
+      }
     }
 
     return () => {
-      // 清理 Web Worker
+      // 清理Web Worker
       if (webWorkerRef.current) {
         webWorkerRef.current.terminate();
         webWorkerRef.current = null;
       }
     };
-  }, []);
-
-  // 当 hue 色调改变时，请求新的颜色计算
-  useEffect(() => {
-    if (webWorkerRef.current && hue !== lastHue.current) {
-      webWorkerRef.current.postMessage({
-        type: 'calculateHueAdjustment',
-        data: {
-          baseColors: [
-            [0.611765, 0.262745, 0.996078],
-            [0.298039, 0.760784, 0.913725],
-            [0.062745, 0.078431, 0.6],
-          ],
-          hue,
-        },
-      });
-    }
   }, [hue]);
 
   // 更新预计算的颜色数组
   useEffect(() => {
     if (adjustedColors.length === 3) {
       const arr = precomputedColorsRef.current;
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
+      for (let i = 0; i < 3; i += 1) {
+        for (let j = 0; j < 3; j += 1) {
           arr[i * 3 + j] = adjustedColors[i][j];
         }
       }
@@ -144,7 +141,15 @@ export default function Orb({
     container.appendChild(gl.canvas);
 
     const geometry = new Triangle(gl);
-
+    
+    // 提前声明所有变量，解决"变量使用前定义"问题
+    let rafId: number;
+    let targetHover = 0;
+    let lastTime = 0;
+    let currentRot = 0;
+    const rotationSpeed = 0.3; // radians per second
+    
+    // 提前声明程序和网格
     const program = new Program(gl, {
       vertex: vert,
       fragment: frag,
@@ -161,9 +166,9 @@ export default function Orb({
         precomputedColors: { value: precomputedColorsRef.current },
       },
     });
-
+    
     const mesh = new Mesh(gl, { geometry, program });
-
+    
     function resize() {
       if (!container) return;
       const dpr = window.devicePixelRatio || 1;
@@ -175,83 +180,29 @@ export default function Orb({
 
       // 使用预先分配的向量对象
       resolutionVec.current.set(
-        gl.canvas.width, 
-        gl.canvas.height, 
-        gl.canvas.width / gl.canvas.height
+        gl.canvas.width,
+        gl.canvas.height,
+        gl.canvas.width / gl.canvas.height,
       );
       program.uniforms.iResolution.value = resolutionVec.current;
     }
-
+    
     // 使用防抖函数优化 resize 事件
     let resizeTimeout: number;
-    const handleResize = () => {
+    const handleResize = (): void => {
       clearTimeout(resizeTimeout);
       resizeTimeout = window.setTimeout(resize, 100);
     };
-
-    window.addEventListener('resize', handleResize);
-    resize();
-
-    let targetHover = 0;
-    let lastTime = 0;
-    let currentRot = 0;
-    const rotationSpeed = 0.3; // radians per second
-
-    // 优化鼠标移动处理器，使用距离平方计算而不是距离
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const { width, height } = rect;
-      const size = Math.min(width, height);
-      const centerX = width / 2;
-      const centerY = height / 2;
-      const uvX = ((x - centerX) / size) * 2.0;
-      const uvY = ((y - centerY) / size) * 2.0;
-
-      // 使用距离平方避免开方操作
-      const distSq = uvX * uvX + uvY * uvY;
-      if (distSq < 0.64) {
-        // 0.8^2 = 0.64
-        targetHover = 1;
-      } else {
-        targetHover = 0;
-      }
-    };
-
-    const handleMouseLeave = () => {
-      targetHover = 0;
-    };
-
-    container.addEventListener('mousemove', handleMouseMove);
-    container.addEventListener('mouseleave', handleMouseLeave);
-
-    // 监听 WebGL 上下文丢失事件
-    const handleContextLost = (e: Event) => {
-      e.preventDefault();
-      cancelAnimationFrame(rafId);
-    };
-
-    // 监听 WebGL 上下文恢复事件
-    const handleContextRestored = () => {
-      // 重新初始化必要资源
-      resize();
-      rafId = requestAnimationFrame(update);
-    };
-
-    gl.canvas.addEventListener('webglcontextlost', handleContextLost);
-    gl.canvas.addEventListener('webglcontextrestored', handleContextRestored);
-
-    // 动画循环
-    let rafId: number;
-    const update = (t: number) => {
+    
+    // 预定义更新函数
+    const update = (t: number): void => {
       // 适应性帧率控制：在性能问题下降低频率
       const now = performance.now();
       const timeSinceLastFrame = now - lastTime;
 
       // 计算 FPS - 仅在开发模式下
       if (process.env.NODE_ENV === 'development') {
-        frameCount.current++;
+        frameCount.current += 1;
         if (t - lastFpsUpdate.current >= 1000) {
           // 每秒更新一次
           setFps(frameCount.current);
@@ -274,7 +225,7 @@ export default function Orb({
       }
 
       // 自适应帧跳过：如果帧时间短于目标且不在交互状态
-      adaptiveFrameskip.current.skipCounter++;
+      adaptiveFrameskip.current.skipCounter += 1;
       if (
         timeSinceLastFrame < adaptiveFrameskip.current.frameTime &&
         program.uniforms.hover.value < 0.1 &&
@@ -322,10 +273,63 @@ export default function Orb({
       rafId = requestAnimationFrame(update);
     };
 
+    window.addEventListener('resize', handleResize);
+    resize();
+
+    // 优化鼠标移动处理器，使用距离平方计算而不是距离
+    const handleMouseMove = (e: MouseEvent): void => {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const { width, height } = rect;
+      const size = Math.min(width, height);
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const uvX = ((x - centerX) / size) * 2.0;
+      const uvY = ((y - centerY) / size) * 2.0;
+
+      // 使用距离平方避免开方操作
+      const distSq = uvX * uvX + uvY * uvY;
+      if (distSq < 0.64) {
+        // 0.8^2 = 0.64
+        targetHover = 1;
+      } else {
+        targetHover = 0;
+      }
+    };
+
+    const handleMouseLeave = (): void => {
+      targetHover = 0;
+    };
+
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseleave', handleMouseLeave);
+
+    // 监听 WebGL 上下文丢失事件
+    const handleContextLost = (e: Event): void => {
+      e.preventDefault();
+      cancelAnimationFrame(rafId);
+    };
+
+    // 监听 WebGL 上下文恢复事件
+    const handleContextRestored = (): void => {
+      // 重新初始化必要资源
+      resize();
+      rafId = requestAnimationFrame(update);
+    };
+
+    gl.canvas.addEventListener('webglcontextlost', handleContextLost);
+    gl.canvas.addEventListener('webglcontextrestored', handleContextRestored);
+
+    // 启动动画循环
     rafId = requestAnimationFrame(update);
 
+    // eslint-disable-next-line consistent-return
     return () => {
-      cancelAnimationFrame(rafId);
+      // 确保只取消定义过的帧请求
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
       clearTimeout(resizeTimeout);
 
       // 清理事件监听器
@@ -345,6 +349,14 @@ export default function Orb({
       mesh.setParent(null); // 解除 Mesh 的父级关系
     };
   }, [hue, hoverIntensity, rotateOnHover, forceHoverState, rendererOptions]);
+
+  // 修改嵌套三元表达式为更清晰的函数
+  const getParticleColor = (colorIndex: number): string => {
+    if (colorIndex === 0) return 'var(--neon-blue)';
+    if (colorIndex === 1) return 'var(--neon-purple)';
+    if (colorIndex === 2) return 'var(--neon-pink)';
+    return 'var(--neon-green)';
+  };
 
   return (
     <div ref={ctnDom} className="w-full h-full relative">
@@ -389,23 +401,18 @@ export default function Orb({
                   <div
                     key={i}
                     className="orb-particle"
-                    style={{
-                      '--particle-size': `${particle.size}px`,
-                      '--particle-distance': `${particle.distance}px`,
-                      '--particle-duration': `${particle.duration}s`,
-                      '--particle-opacity': `${particle.opacity}`,
-                      '--particle-delay': `${particle.delay}s`,
-                      '--particle-direction': `${particle.direction}deg`,
-                      '--particle-color':
-                        particle.color === 0
-                          ? 'var(--neon-blue)'
-                          : particle.color === 1
-                            ? 'var(--neon-purple)'
-                            : particle.color === 2
-                              ? 'var(--neon-pink)'
-                              : 'var(--neon-green)',
-                      background: 'var(--particle-color)',
-                    } as React.CSSProperties}
+                    style={
+                      {
+                        '--particle-size': `${particle.size}px`,
+                        '--particle-distance': `${particle.distance}px`,
+                        '--particle-duration': `${particle.duration}s`,
+                        '--particle-opacity': `${particle.opacity}`,
+                        '--particle-delay': `${particle.delay}s`,
+                        '--particle-direction': `${particle.direction}deg`,
+                        '--particle-color': getParticleColor(particle.color),
+                        background: 'var(--particle-color)',
+                      } as React.CSSProperties
+                    }
                   />
                 ))}
               </div>

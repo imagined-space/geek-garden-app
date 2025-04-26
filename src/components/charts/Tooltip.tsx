@@ -20,7 +20,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({ point, visible, x, y }) => 
       return num.toFixed(6);
     }
     // 对于较大的值，使用较少小数位
-    else if (num > 100) {
+    if (num > 100) {
       return num.toFixed(2);
     }
     // 默认使用4位小数
@@ -31,15 +31,15 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({ point, visible, x, y }) => 
   const formatVolume = (volume: number): string => {
     if (volume >= 1000000) {
       return `${(volume / 1000000).toFixed(2)}M`;
-    } else if (volume >= 1000) {
+    } if (volume >= 1000) {
       return `${(volume / 1000).toFixed(2)}K`;
     }
     return volume.toFixed(2);
   };
 
   // 确保tooltip不会超出屏幕边界
-  let tooltipX = x;
-  let tooltipY = y;
+  const tooltipX = x;
+  const tooltipY = y;
 
   // 添加相对于容器的位置计算，防止tooltip超出边界
   const offsetY = 120; // 向上偏移量，避免tooltip被鼠标遮挡
