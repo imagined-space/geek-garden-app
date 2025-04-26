@@ -1,103 +1,59 @@
-"use client"
+'use client';
 
-import { useEffect, useRef } from "react";
-import { useInView, useMotionValue, useSpring } from "framer-motion";
+import React from 'react';
+import ReactCountUp from 'react-countup';
 
 interface CountUpProps {
-    to: number;
-    from?: number;
-    direction?: "up" | "down";
-    delay?: number;
-    duration?: number;
-    className?: string;
-    startWhen?: boolean;
-    separator?: string;
-    decimalPlaces?: number;
-    onStart?: () => void;
-    onEnd?: () => void;
+  to: number;
+  from?: number;
+  direction?: 'up' | 'down';
+  delay?: number;
+  duration?: number;
+  className?: string;
+  startWhen?: boolean;
+  separator?: string;
+  decimalPlaces?: number;
+  onStart?: () => void;
+  onEnd?: () => void;
 }
 
 export default function CountUp({
-    to,
-    from = 0,
-    direction = "up",
-    delay = 0,
-    duration = 2, // Duration of the animation in seconds
-    className = "",
-    startWhen = true,
-    separator = "",
-    decimalPlaces = 0,
-    onStart,
-    onEnd,
+  to,
+  from = 0,
+  direction = 'up',
+  delay = 0,
+  duration = 2,
+  className = '',
+  startWhen = true,
+  separator = '',
+  decimalPlaces = 0,
+  onStart,
+  onEnd,
 }: CountUpProps) {
-    const ref = useRef<HTMLSpanElement>(null);
-    const motionValue = useMotionValue(direction === "down" ? to : from);
+  // 如果是向下计数，交换from和to
+  const startValue = direction === 'down' ? to : from;
+  const endValue = direction === 'down' ? from : to;
 
-    // Calculate damping and stiffness based on duration
-    const damping = 20 + 40 * (1 / duration); // Adjust this formula for finer control
-    const stiffness = 100 * (1 / duration);   // Adjust this formula for finer control
+  // 用于确定是否开始动画
+  const shouldStart = startWhen;
 
-    const springValue = useSpring(motionValue, {
-        damping,
-        stiffness,
-    });
-
-    const isInView = useInView(ref, { once: true, margin: "0px" });
-
-    // Set initial text content to the initial value based on direction
-    useEffect(() => {
-        if (ref.current) {
-            ref.current.textContent = String(direction === "down" ? to : from);
-        }
-    }, [from, to, direction]);
-
-    // Start the animation when in view and startWhen is true
-    useEffect(() => {
-        if (isInView && startWhen) {
-            if (typeof onStart === "function") {
-                onStart();
-            }
-
-            const timeoutId = setTimeout(() => {
-                motionValue.set(direction === "down" ? from : to);
-            }, delay * 1000);
-
-            const durationTimeoutId = setTimeout(() => {
-                if (typeof onEnd === "function") {
-                    onEnd();
-                }
-            }, delay * 1000 + duration * 1000);
-
-            return () => {
-                clearTimeout(timeoutId);
-                clearTimeout(durationTimeoutId);
-            };
-        }
-        return undefined;
-    }, [isInView, startWhen, motionValue, direction, from, to, delay, onStart, onEnd, duration]);
-
-    // Update text content with formatted number on spring value change
-    useEffect(() => {
-        const unsubscribe = springValue.on("change", (latest) => {
-            if (ref.current) {
-                const options = {
-                    useGrouping: !!separator,
-                    minimumFractionDigits: decimalPlaces,
-                    maximumFractionDigits: decimalPlaces,
-                };
-
-                const formattedNumber = Intl.NumberFormat("en-US", options).format(
-                    Number(latest.toFixed(decimalPlaces))
-                );
-
-                ref.current.textContent = separator
-                    ? formattedNumber.replace(/,/g, separator)
-                    : formattedNumber;
-            }
-        });
-
-        return () => unsubscribe();
-    }, [springValue, separator, decimalPlaces]);
-
-    return <span className={`${className}`} ref={ref} />;
+  return (
+    <span className={className}>
+      {shouldStart ? (
+        <ReactCountUp
+          start={startValue}
+          end={endValue}
+          delay={delay}
+          duration={duration}
+          separator={separator}
+          decimals={decimalPlaces}
+          onStart={onStart}
+          onEnd={onEnd}
+          preserveValue
+        />
+      ) : (
+        startValue
+      )}
+    </span>
+  );
 }

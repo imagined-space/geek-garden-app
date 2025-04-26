@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { walletConnectedAtom } from '@/stores/walletStore';
 import { useTokenExchange } from '@/hooks/useTokenExchange';
