@@ -141,10 +141,10 @@ export const TokenExchange: React.FC = () => {
         {isBuying ? t('tokenExchange.buyG') : t('tokenExchange.exchangeETH')}
       </h2>
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6">
         {isBuying ? (
           <>
-            <div className="text-gray-300">
+            <div className="text-gray-300 mb-3 md:mb-0">
               <p>
                 {t('tokenExchange.ethBalance')}{' '}
                 <CountUp
@@ -161,11 +161,11 @@ export const TokenExchange: React.FC = () => {
                 setIsBuying(!isBuying);
                 setAmount('');
               }}
-              className="text-[#00ffff] mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff]"
+              className="text-[#00ffff] my-2 md:mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff] flex items-center justify-center"
             >
               ⇄
             </button>
-            <div className="text-gray-300">
+            <div className="text-gray-300 mt-3 md:mt-0">
               <p>
                 {t('tokenExchange.ydBalance')}{' '}
                 <CountUp
@@ -179,7 +179,7 @@ export const TokenExchange: React.FC = () => {
           </>
         ) : (
           <>
-            <div className="text-gray-300">
+            <div className="text-gray-300 mb-3 md:mb-0">
               <p>
                 {t('tokenExchange.ydBalance')}{' '}
                 <CountUp
@@ -195,11 +195,11 @@ export const TokenExchange: React.FC = () => {
                 setIsBuying(!isBuying);
                 setAmount('');
               }}
-              className="text-[#00ffff] mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff]"
+              className="text-[#00ffff] my-2 md:mx-4 hover:text-[#ff00ff] transition-all duration-300 text-2xl group-hover:text-[#ff00ff] flex items-center justify-center"
             >
               ⇄
             </button>
-            <div className="text-gray-300">
+            <div className="text-gray-300 mt-3 md:mt-0">
               <p>
                 {t('tokenExchange.ethBalance')}{' '}
                 <CountUp
@@ -220,7 +220,7 @@ export const TokenExchange: React.FC = () => {
           <label htmlFor="amount-input" className="block text-gray-300 whitespace-nowrap text-2xl">
             {isBuying ? t('tokenExchange.ethAmount') : t('tokenExchange.ydAmount')}
           </label>
-          <div className="relative flex items-center">
+          <div className="relative flex items-center ml-4">
             <input
               id="amount-input"
               type="number"
@@ -228,7 +228,7 @@ export const TokenExchange: React.FC = () => {
               onChange={handleInputChange}
               step={isBuying ? 0.01 : 10}
               min="0"
-              className="p-2 ml-4 rounded bg-transparent text-white border border-[#00ffff] focus:outline-none focus:border-[#ff00ff] transition-all duration-300 group-hover:border-[#ff00ff] shadow-[0_0_10px_rgba(0,255,255,0.1)] group-hover:shadow-[0_0_10px_rgba(255,0,255,0.1)]"
+              className="p-2 rounded bg-transparent text-white border border-[#00ffff] focus:outline-none focus:border-[#ff00ff] transition-all duration-300 group-hover:border-[#ff00ff] shadow-[0_0_10px_rgba(0,255,255,0.1)] group-hover:shadow-[0_0_10px_rgba(255,0,255,0.1)] w-full max-w-[150px] sm:max-w-[200px]"
               style={{
                 WebkitAppearance: 'none',
                 MozAppearance: 'textfield',
