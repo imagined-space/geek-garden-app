@@ -1,540 +1,533 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useTransition, useDeferredValue, useCallback } from 'react';
 import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Area,
-  AreaChart,
-  ComposedChart,
-  Bar,
-  Line,
-  Legend,
-} from 'recharts';
+  createChart,
+  CandlestickSeries,
+  LineSeries,
+  HistogramSeries,
+  IChartApi,
+  ISeriesApi,
+  UTCTimestamp,
+  CandlestickData,
+  HistogramData,
+  LineData,
+  MouseEventParams,
+  Time,
+} from 'lightweight-charts';
+import { GeckoTerminalResponse, CoinDataPoint } from '@/types/yd-coin-chart';
 import { useLanguage } from '@/components/language/Context';
-import {
-  ChartMouseEvent,
-  CoinDataPoint,
-  CrosshairValues,
-  CustomTooltipProps,
-} from '@/types/yd-coin-chart';
+import ChartTooltip from './Tooltip'; // 导入 Tooltip 组件
 
 const YiDengCoinChart = () => {
   const { t } = useLanguage();
+  const [isPending, startTransition] = useTransition();
   const [data, setData] = useState<CoinDataPoint[]>([]);
-  const [crosshairValues, setCrosshairValues] = useState<CrosshairValues | null>(null);
-  const [viewMode, setViewMode] = useState<'area' | 'volume' | 'candle' | 'ohlc'>('area');
-  const chartRef = useRef<HTMLDivElement>(null);
+  const deferredData = useDeferredValue(data);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [priceChange, setPriceChange] = useState<number>(0);
+  const [viewMode, setViewMode] = useState<'candle' | 'line' | 'volume'>('candle');
+
+  // 避免不必要的重新渲染
+  const MemoizedTooltip = React.memo(ChartTooltip);
+
+  // 添加Tooltip相关状态
+  const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
+  const [tooltipPoint, setTooltipPoint] = useState<CoinDataPoint | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 添加代币元数据状态
+  const [baseToken, setBaseToken] = useState<{ name: string; symbol: string }>({
+    name: '',
+    symbol: '',
+  });
+  const [quoteToken, setQuoteToken] = useState<{ name: string; symbol: string }>({
+    name: '',
+    symbol: '',
+  });
+
+  // 引用容器和图表
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const lineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+
   // 使用当前日期
   const [currentDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // 时间周期选择
+  const [timeframe, setTimeframe] = useState<'5m' | '15m' | '1h' | '4h' | '1d'>('1d');
+
+  // 使用 useCallback 包装 findDataPointByTime 函数，减少不必要的函数重建
+  const findDataPointByTime = useCallback(
+    (time: Time | undefined): CoinDataPoint | null => {
+      if (!time || typeof time !== 'number' || data.length === 0) return null;
+
+      const timestamp = time as UTCTimestamp;
+      return data.find(item => item.time === timestamp) || null;
+    },
+    [data]
+  );
+
+  // 生成模拟数据（当 API 请求失败时使用）
+  const generateMockData = () => {
+    const mockData: CoinDataPoint[] = [];
+    let price = 450; // 起始价格
+
+    // 生成从3月2日到今天的数据
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), 2, 2); // 3月2日
+
+    const currentDay = new Date(startDate);
+
+    // 生成一个整体下降趋势
+    while (currentDay <= today) {
+      if (currentDay.getDay() !== 0 && currentDay.getDay() !== 6) {
+        // 排除周末
+        const dayProgress =
+          (currentDay.getTime() - startDate.getTime()) / (today.getTime() - startDate.getTime());
+
+        // 随着时间推移，逐渐下降
+        const trend = -170 * dayProgress;
+
+        // 添加随机波动
+        const volatility = (Math.random() - 0.5) * 20;
+
+        // 计算新价格，并确保在250-450之间
+        price = Math.max(250, Math.min(450, price + volatility + trend * 0.1));
+
+        // 随机生成开盘价（前一天收盘价附近）
+        const open =
+          mockData.length === 0 ? price + Math.random() * 10 : mockData[mockData.length - 1].close;
+
+        // 高点至少是开盘价和收盘价中的较高者
+        const maxPrice = Math.max(price, open);
+        const high = maxPrice + Math.random() * 5;
+
+        // 低点至少是开盘价和收盘价中的较低者
+        const minPrice = Math.min(price, open);
+        const low = Math.max(minPrice - Math.random() * 5, price * 0.95); // 确保不会太低
+
+        const dayData: CoinDataPoint = {
+          time: Math.floor(currentDay.getTime() / 1000) as UTCTimestamp,
+          open: parseFloat(open.toFixed(2)),
+          high: parseFloat(high.toFixed(2)),
+          low: parseFloat(low.toFixed(2)),
+          close: parseFloat(price.toFixed(2)),
+          volume: Math.floor(Math.random() * 45000 + 15000),
+        };
+
+        mockData.push(dayData);
+      }
+
+      // 移到下一天
+      currentDay.setDate(currentDay.getDate() + 1);
+    }
+
+    // 确保最后一天的价格为270.23
+    if (mockData.length > 0) {
+      mockData[mockData.length - 1].close = 270.23;
+      mockData[mockData.length - 1].open = 312.84;
+      mockData[mockData.length - 1].high = 315.45;
+      mockData[mockData.length - 1].low = 270.0;
+      mockData[mockData.length - 1].volume = 38000;
+    }
+
+    setData(mockData);
+    setCurrentPrice(mockData.length > 0 ? mockData[mockData.length - 1].close : null);
+    setPriceChange(-12.43); // 模拟价格变化
+
+    // 设置模拟的代币元数据
+    setBaseToken({ name: 'YiDeng Coin', symbol: 'GC' });
+    setQuoteToken({ name: 'US Dollar', symbol: 'USD' });
+  };
+
+  // 从 GeckoTerminal API 获取数据
   useEffect(() => {
-    // 生成模拟数据
-    const generateMockData = (): CoinDataPoint[] => {
-      const mockData: CoinDataPoint[] = [];
-      let price = 450; // 起始价格（较高）
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // 构建 API URL，这里使用样例地址，实际使用时可能需要替换为真实的代币地址
+        // 默认使用 ETH 网络上的某个代币作为示例
+        const network = 'eth'; // 以太坊网络
+        const poolAddress = '0x60594a405d53811d3bc4766596efd80fd545a270'; // ETH-USDT 池作为示例
 
-      // 生成从3月2日到今天的数据
-      const today = new Date();
-      const startDate = new Date(today.getFullYear(), 2, 2); // 3月2日
+        // 构建时间参数
+        let timeUnit = ''; // 时间单位
+        let timeAggregate = 1; // 时间数值
 
-      const currentDay = new Date(startDate);
-
-      // 先生成一个整体下降趋势
-      while (currentDay <= today) {
-        if (currentDay.getDay() !== 0 && currentDay.getDay() !== 6) {
-          // 排除周末
-          // 创建一些波动性以增加真实感
-          const dayProgress =
-            (currentDay.getTime() - startDate.getTime()) / (today.getTime() - startDate.getTime());
-
-          // 随着时间推移，逐渐下降
-          const trend = -170 * dayProgress;
-
-          // 添加随机波动
-          const volatility = (Math.random() - 0.5) * 20;
-
-          // 计算新价格，并确保在250-450之间
-          price = Math.max(250, Math.min(450, price + volatility + trend * 0.1));
-
-          // 随机生成开盘价（前一天收盘价附近）
-          const open =
-            mockData.length === 0
-              ? price + Math.random() * 10
-              : mockData[mockData.length - 1].price;
-
-          // 高点至少是开盘价和收盘价中的较高者
-          const maxPrice = Math.max(price, open);
-          const high = maxPrice + Math.random() * 5;
-
-          // 低点至少是开盘价和收盘价中的较低者
-          const minPrice = Math.min(price, open);
-          const low = Math.max(minPrice - Math.random() * 5, price * 0.95); // 确保不会太低
-
-          const dayData: CoinDataPoint = {
-            date: currentDay.toISOString().split('T')[0],
-            price: parseFloat(price.toFixed(2)),
-            open: parseFloat(open.toFixed(2)),
-            high: parseFloat(high.toFixed(2)),
-            low: parseFloat(low.toFixed(2)),
-            volume: Math.floor(Math.random() * 45000 + 15000),
-          };
-
-          mockData.push(dayData);
+        switch (timeframe) {
+          case '5m':
+            timeUnit = 'minute';
+            timeAggregate = 5;
+            break;
+          case '15m':
+            timeUnit = 'minute';
+            timeAggregate = 15;
+            break;
+          case '1h':
+            timeUnit = 'hour';
+            timeAggregate = 1;
+            break;
+          case '4h':
+            timeUnit = 'hour';
+            timeAggregate = 4;
+            break;
+          case '1d':
+            timeUnit = 'day';
+            timeAggregate = 1;
+            break;
+          default:
+            timeUnit = 'day';
+            timeAggregate = 1;
+            break;
         }
 
-        // 移到下一天
-        currentDay.setDate(currentDay.getDate() + 1);
-      }
+        // 获取 K 线数据
+        const apiUrl = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeUnit}?aggregate=${timeAggregate}`;
 
-      // 确保最后一天的价格为270.23
-      if (mockData.length > 0) {
-        mockData[mockData.length - 1].price = 270.23;
-        mockData[mockData.length - 1].open = 312.84;
-        mockData[mockData.length - 1].high = 315.45;
-        mockData[mockData.length - 1].low = 270.0;
-        mockData[mockData.length - 1].volume = 38000;
-      }
+        const response = await fetch(apiUrl);
 
-      return mockData;
+        if (!response.ok) {
+          throw new Error(`API 请求失败: ${response.status}`);
+        }
+
+        const json: GeckoTerminalResponse = await response.json();
+
+        // 设置代币元数据
+        if (json.meta) {
+          setBaseToken({
+            name: json.meta.base.name || '',
+            symbol: json.meta.base.symbol || '',
+          });
+          setQuoteToken({
+            name: json.meta.quote.name || '',
+            symbol: json.meta.quote.symbol || '',
+          });
+        }
+
+        // 解析数据
+        const candleData: CoinDataPoint[] = json.data.attributes.ohlcv_list.map(item => ({
+          time: (item[0] / 1000) as UTCTimestamp, // 转换为秒级时间戳
+          open: parseFloat(item[1]), // 开盘价
+          high: parseFloat(item[2]), // 最高价
+          low: parseFloat(item[3]), // 最低价
+          close: parseFloat(item[4]), // 收盘价
+          volume: parseFloat(item[5]), // 成交量
+        }));
+
+        // 使用 startTransition 包装状态更新，减少渲染阻塞
+        startTransition(() => {
+          setData(candleData);
+
+          // 设置当前价格和价格变化
+          if (candleData.length > 0) {
+            const latestData = candleData[candleData.length - 1];
+            setCurrentPrice(latestData.close);
+
+            // 计算24小时变化率
+            if (candleData.length > 1) {
+              const previousData = candleData[candleData.length - 2];
+              const change = ((latestData.close - previousData.close) / previousData.close) * 100;
+              setPriceChange(change);
+            }
+          }
+        });
+      } catch (err) {
+        // 移除 console.error 以解决 no-console 警告
+        setError(err instanceof Error ? err.message : '未知错误');
+
+        // 生成模拟数据以便在 API 未连接时展示
+        generateMockData();
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    setData(generateMockData());
+    fetchData();
+  }, [timeframe]);
+
+  // 初始化图表
+  useEffect(() => {
+    if (chartContainerRef.current && !chartRef.current) {
+      // 创建图表
+      chartRef.current = createChart(chartContainerRef.current, {
+        layout: {
+          background: { color: '#0a0b1e' },
+          textColor: '#8884d8',
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
+          horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
+        },
+        timeScale: {
+          borderColor: '#555',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            color: '#ff2a6d',
+            width: 1,
+            style: 2, // 虚线
+          },
+          horzLine: {
+            color: '#ff2a6d',
+            width: 1,
+            style: 2, // 虚线
+          },
+        },
+        width: chartContainerRef.current.clientWidth,
+        height: 400,
+      });
+
+      // 创建蜡烛图系列
+      candleSeriesRef.current = chartRef.current.addSeries(CandlestickSeries, {
+        upColor: '#01b574',
+        downColor: '#f23645',
+        borderDownColor: '#f23645',
+        borderUpColor: '#01b574',
+        wickDownColor: '#f23645',
+        wickUpColor: '#01b574',
+      });
+
+      // 创建成交量系列
+      volumeSeriesRef.current = chartRef.current.addSeries(HistogramSeries, {
+        color: '#555555',
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: '', // 与主图表分离
+      });
+
+      // 创建线图系列
+      lineSeriesRef.current = chartRef.current.addSeries(LineSeries, {
+        color: '#05d9e8',
+        lineWidth: 2,
+      });
+
+      // 添加窗口调整大小事件
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      // 清理函数
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+          candleSeriesRef.current = null;
+          volumeSeriesRef.current = null;
+          lineSeriesRef.current = null;
+        }
+      };
+    }
+    
+    // 没有依赖项的 useEffect 不需要返回值
+    return undefined;
   }, []);
 
-  // 鼠标移动处理函数
-  const handleMouseMove = (e: ChartMouseEvent): void => {
-    if (e && e.activePayload && e.activePayload.length && e.activeCoordinate) {
-      setCrosshairValues({
-        x: e.activeCoordinate.x,
-        y: e.activeCoordinate.y,
-        data: e.activePayload[0].payload,
-      });
-    }
-  };
+  // 在数据或图表模式改变时更新图表数据与显示
+  useEffect(() => {
+    if (deferredData.length > 0 && chartRef.current) {
+      // 对数据按时间戳进行排序
+      const sortedData = [...deferredData].sort((a, b) => a.time - b.time);
 
-  // 鼠标离开处理函数
-  const handleMouseLeave = (): void => {
-    setCrosshairValues(null);
-  };
+      // 准备蜡烛图数据
+      const candleData: CandlestickData[] = sortedData.map(item => ({
+        time: item.time,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }));
 
-  // 自定义tooltip组件
-  const CustomTooltip = ({ active, payload }: CustomTooltipProps): React.ReactElement | null => {
-    if (active && payload && payload.length) {
-      const tooltipData = payload[0].payload;
-      return (
-        <div className="cyberpunk-card p-4 text-sm">
-          <p className="text-white font-bold mb-2">{tooltipData.date}</p>
-          <div className="grid grid-cols-2 gap-2">
-            <p className="text-gray-400">
-              {t('chart.open')}: <span className="text-white">${tooltipData.open}</span>
-            </p>
-            <p className="text-gray-400">
-              {t('chart.close')}: <span className="text-white">${tooltipData.price}</span>
-            </p>
-            <p className="text-green-400">
-              {t('chart.high')}: <span className="text-white">${tooltipData.high}</span>
-            </p>
-            <p className="text-red-400">
-              {t('chart.low')}: <span className="text-white">${tooltipData.low}</span>
-            </p>
-            <p className="text-gray-400">
-              {t('chart.volume')}:{' '}
-              <span className="text-white">{tooltipData.volume.toLocaleString()}</span>
-            </p>
-            <p className="text-yellow-400">
-              {t('chart.change')}:
-              <span
-                className={
-                  tooltipData.price > tooltipData.open ? 'text-green-400 ml-1' : 'text-red-400 ml-1'
-                }
-              >
-                {((tooltipData.price / tooltipData.open - 1) * 100).toFixed(2)}%
-              </span>
-            </p>
-          </div>
-        </div>
-      );
+      // 准备成交量数据
+      const volumeData: HistogramData[] = sortedData.map(item => ({
+        time: item.time,
+        value: item.volume,
+        color: item.close >= item.open ? 'rgba(1, 181, 116, 0.5)' : 'rgba(242, 54, 69, 0.5)',
+      }));
+
+      // 准备线图数据
+      const lineData: LineData[] = sortedData.map(item => ({
+        time: item.time,
+        value: item.close,
+      }));
+
+      // 更新各个系列的数据
+      if (candleSeriesRef.current) {
+        candleSeriesRef.current.setData(candleData);
+      }
+
+      if (volumeSeriesRef.current) {
+        volumeSeriesRef.current.setData(volumeData);
+      }
+
+      if (lineSeriesRef.current) {
+        lineSeriesRef.current.setData(lineData);
+      }
+
+      // 根据视图模式显示/隐藏相应的系列
+      switch (viewMode) {
+        case 'candle':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: true });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
+
+        case 'line':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: true });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: false });
+          break;
+
+        case 'volume':
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: false });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
+          
+        default:
+          // 添加默认情况处理
+          if (candleSeriesRef.current) candleSeriesRef.current.applyOptions({ visible: true });
+          if (lineSeriesRef.current) lineSeriesRef.current.applyOptions({ visible: false });
+          if (volumeSeriesRef.current) volumeSeriesRef.current.applyOptions({ visible: true });
+          break;
+      }
+
+      // 调整时间比例以显示所有数据
+      chartRef.current.timeScale().fitContent();
+
+      // 修复依赖项问题，获取 chartContainer 引用
+      const containerRef = chartContainerRef.current;
+
+      // 设置鼠标事件处理程序 - 在数据加载完成后才设置
+      const crosshairMoveHandler = (param: MouseEventParams) => {
+        if (!param.point || param.time === undefined) {
+          // 如果鼠标移出图表区域或没有有效数据点，隐藏tooltip
+          if (!containerRef?.contains(document.activeElement)) {
+            setTooltipVisible(false);
+          }
+          return;
+        }
+
+        // 获取对应的数据点
+        const dataPoint = findDataPointByTime(param.time);
+
+        if (dataPoint) {
+          // 更新tooltip数据和位置
+          setTooltipPoint(dataPoint);
+
+          // 获取图表容器的位置信息
+          const {x} = param.point;
+          const y = param.point.y - 10; // 向上偏移一点，避免遮挡鼠标
+
+          setTooltipPosition({ x, y });
+          setTooltipVisible(true);
+        } else {
+          setTooltipVisible(false);
+        }
+      };
+
+      chartRef.current.subscribeCrosshairMove(crosshairMoveHandler);
+
+      // 鼠标离开图表区域时隐藏tooltip
+      const handleMouseLeave = () => {
+        setTooltipVisible(false);
+      };
+
+      containerRef?.addEventListener('mouseleave', handleMouseLeave);
+
+      return () => {
+        containerRef?.removeEventListener('mouseleave', handleMouseLeave);
+        chartRef.current?.unsubscribeCrosshairMove(crosshairMoveHandler);
+      };
     }
-    return null;
-  };
+    
+    // 当条件不满足时返回空清理函数
+    return () => {};
+  }, [deferredData, viewMode, findDataPointByTime]);
 
   // 处理图表模式切换的函数
   const toggleChartMode = (): void => {
     setViewMode(prev => {
-      if (prev === 'area') return 'volume';
-      if (prev === 'volume') return 'candle';
-      if (prev === 'candle') return 'ohlc';
-      return 'area';
+      if (prev === 'candle') return 'line';
+      if (prev === 'line') return 'volume';
+      return 'candle';
     });
   };
 
   // 获取图表显示文本
   const getChartModeText = (): string => {
     switch (viewMode) {
-      case 'area':
-        return '成交量';
-      case 'volume':
-        return 'K线图';
       case 'candle':
-        return 'OHLC图';
+        return t('chart.btn.type.line');
+      case 'line':
+        return t('chart.btn.type.volume');
+      case 'volume':
       default:
-        return '区域图';
+        return t('chart.btn.type.candle');
     }
   };
 
-  // 渲染不同的图表内容
-  const renderChart = (): React.ReactElement => {
-    // 区域图
-    if (viewMode === 'area') {
-      return (
-        <AreaChart
-          data={data}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
-        >
-          <defs>
-            <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#05d9e8" stopOpacity={0.5} />
-              <stop offset="95%" stopColor="#05d9e8" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-          <XAxis
-            dataKey="date"
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickFormatter={(value: string) => {
-              const date = new Date(value);
-              return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            }}
-            tickCount={6}
-            interval="preserveStartEnd"
-            minTickGap={30}
-          />
-          <YAxis
-            domain={['auto', 'auto']}
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickCount={5}
-            tickFormatter={(value: number) => value.toFixed(2)}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Area
-            type="monotone"
-            dataKey="price"
-            stroke="#05d9e8"
-            fillOpacity={1}
-            fill="url(#colorPrice)"
-            strokeWidth={2}
-          />
+  // 处理时间周期切换
+  const handleTimeframeChange = (newTimeframe: '5m' | '15m' | '1h' | '4h' | '1d'): void => {
+    setTimeframe(newTimeframe);
+  };
 
-          {/* 十字线 */}
-          {crosshairValues && (
-            <>
-              <ReferenceLine x={crosshairValues.data.date} stroke="#ff2a6d" strokeDasharray="3 3" />
-              <ReferenceLine
-                y={crosshairValues.data.price}
-                stroke="#ff2a6d"
-                strokeDasharray="3 3"
-              />
-            </>
-          )}
-        </AreaChart>
-      );
+  // 获取当前图表类型文本
+  const getChartTypeText = (): string => {
+    switch (viewMode) {
+      case 'candle':
+        return t('chart.type.candle');
+      case 'line':
+        return t('chart.type.line');
+      case 'volume':
+        return t('chart.type.volume');
+      default:
+        return t('chart.type.candle');
     }
-
-    // 成交量图
-    if (viewMode === 'volume') {
-      return (
-        <ComposedChart
-          data={data}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-          <XAxis
-            dataKey="date"
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickFormatter={(value: string) => {
-              const date = new Date(value);
-              return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            }}
-            tickCount={6}
-            interval="preserveStartEnd"
-            minTickGap={30}
-          />
-          <YAxis
-            dataKey="volume"
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickFormatter={(value: number) => {
-              if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-              if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-              return value.toString();
-            }}
-            tickCount={5}
-            domain={[0, 'dataMax + 10000']}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="volume" name="成交量" fill="#555555" opacity={0.8}>
-            {data.map((entry, index) => {
-              const dateObj = new Date(entry.date);
-              const day = dateObj.getDate();
-              const fill = day % 2 === 0 ? '#555555' : '#444444';
-
-              return (
-                <rect
-                  key={`bar-${index}`}
-                  x={`${index * (100 / data.length)}%`}
-                  y={`${100 - (entry.volume / 60000) * 100}%`}
-                  width={`${(100 / data.length) * 0.8}%`}
-                  height={`${(entry.volume / 60000) * 100}%`}
-                  fill={fill}
-                  rx={2}
-                  ry={2}
-                />
-              );
-            })}
-          </Bar>
-
-          {/* 十字线 */}
-          {crosshairValues && (
-            <ReferenceLine x={crosshairValues.data.date} stroke="#ff2a6d" strokeDasharray="3 3" />
-          )}
-
-          {/* 图例 */}
-          <text x={20} y={20} fill="#aaaaaa" textAnchor="start" dominantBaseline="hanging">
-            成交量
-          </text>
-        </ComposedChart>
-      );
-    }
-
-    // K线图
-    if (viewMode === 'candle') {
-      return (
-        <ComposedChart
-          data={data}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-          <XAxis
-            dataKey="date"
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickFormatter={(value: string) => {
-              const date = new Date(value);
-              return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            }}
-            tickCount={6}
-            interval="preserveStartEnd"
-            minTickGap={30}
-          />
-          <YAxis
-            domain={['auto', 'auto']}
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            tickCount={5}
-            tickFormatter={(value: number) => value.toFixed(2)}
-            yAxisId="price"
-          />
-          <YAxis
-            dataKey="volume"
-            orientation="right"
-            tick={{ fill: '#8884d8' }}
-            tickLine={{ stroke: '#8884d8' }}
-            yAxisId="volume"
-            tickFormatter={(value: number) => {
-              if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-              if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-              return value.toString();
-            }}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-
-          {/* K线图 */}
-          <Bar dataKey="open" fill="transparent" yAxisId="price" name="开盘价" />
-          <Bar dataKey="high" fill="transparent" yAxisId="price" name="最高价" />
-          <Bar dataKey="low" fill="transparent" yAxisId="price" name="最低价" />
-          <Bar dataKey="price" fill="transparent" name="收盘价" yAxisId="price" />
-
-          {/* 手动渲染K线 */}
-          {data.map((entry, index) => {
-            const isPositive = entry.price >= entry.open;
-            const color = isPositive ? '#01b574' : '#f23645';
-            const barWidth = 8; // 可根据数据量调整
-            const x = index * (100 / data.length) + (100 / data.length - barWidth) / 2;
-
-            // 这里的计算是示意性的，实际值需要根据SVG坐标系统和数据范围计算
-            const yMax = 270;
-            const yRange = 180;
-            const yHigh = 100 - ((entry.high - yMax) / yRange) * 100;
-            const yLow = 100 - ((entry.low - yMax) / yRange) * 100;
-            const yOpen = 100 - ((entry.open - yMax) / yRange) * 100;
-            const yClose = 100 - ((entry.price - yMax) / yRange) * 100;
-
-            return (
-              <g key={`candle-${index}`}>
-                {/* 上下影线 */}
-                <line
-                  x1={`${x + barWidth / 2}%`}
-                  y1={`${yHigh}%`}
-                  x2={`${x + barWidth / 2}%`}
-                  y2={`${yLow}%`}
-                  stroke={color}
-                  strokeWidth={1}
-                />
-                {/* 实体 */}
-                <rect
-                  x={`${x}%`}
-                  y={`${Math.min(yOpen, yClose)}%`}
-                  width={`${barWidth}%`}
-                  height={`${Math.abs(yOpen - yClose)}%`}
-                  fill={color}
-                />
-              </g>
-            );
-          })}
-
-          {/* 成交量柱状图 */}
-          <Bar dataKey="volume" fill="#555555" opacity={0.5} yAxisId="volume" name="成交量" />
-
-          {/* 十字线 */}
-          {crosshairValues && (
-            <>
-              <ReferenceLine x={crosshairValues.data.date} stroke="#ff2a6d" strokeDasharray="3 3" />
-              <ReferenceLine
-                y={crosshairValues.data.price}
-                stroke="#ff2a6d"
-                strokeDasharray="3 3"
-                yAxisId="price"
-              />
-            </>
-          )}
-        </ComposedChart>
-      );
-    }
-
-    // OHLC图 (默认)
-    return (
-      <ComposedChart
-        data={data}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        margin={{ top: 20, right: 20, left: 20, bottom: 5 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-        <XAxis
-          dataKey="date"
-          tick={{ fill: '#8884d8' }}
-          tickLine={{ stroke: '#8884d8' }}
-          tickFormatter={(value: string) => {
-            const date = new Date(value);
-            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-          }}
-          tickCount={6}
-          interval="preserveStartEnd"
-          minTickGap={30}
-        />
-        <YAxis
-          domain={['auto', 'auto']}
-          tick={{ fill: '#8884d8' }}
-          tickLine={{ stroke: '#8884d8' }}
-          tickCount={5}
-          tickFormatter={(value: number) => value.toFixed(2)}
-          yAxisId="price"
-        />
-        <YAxis
-          dataKey="volume"
-          orientation="right"
-          tick={{ fill: '#8884d8' }}
-          tickLine={{ stroke: '#8884d8' }}
-          yAxisId="volume"
-          tickFormatter={(value: number) => {
-            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-            if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-            return value.toString();
-          }}
-        />
-        <Tooltip content={<CustomTooltip />} />
-        <Legend />
-
-        {/* OHLC图 */}
-        <Line
-          type="monotone"
-          dataKey="high"
-          stroke="#01b574"
-          dot={false}
-          yAxisId="price"
-          name="最高价"
-        />
-        <Line
-          type="monotone"
-          dataKey="low"
-          stroke="#f23645"
-          dot={false}
-          yAxisId="price"
-          name="最低价"
-        />
-        <Line
-          type="monotone"
-          dataKey="open"
-          stroke="#ff2a6d"
-          dot={false}
-          yAxisId="price"
-          name="开盘价"
-        />
-        <Line
-          type="monotone"
-          dataKey="price"
-          stroke="#05d9e8"
-          dot={false}
-          yAxisId="price"
-          name="收盘价"
-        />
-
-        {/* 成交量柱状图 */}
-        <Bar dataKey="volume" fill="#555555" opacity={0.5} yAxisId="volume" name="成交量" />
-
-        {/* 十字线 */}
-        {crosshairValues && (
-          <>
-            <ReferenceLine x={crosshairValues.data.date} stroke="#ff2a6d" strokeDasharray="3 3" />
-            <ReferenceLine
-              y={crosshairValues.data.price}
-              stroke="#ff2a6d"
-              strokeDasharray="3 3"
-              yAxisId="price"
-            />
-          </>
-        )}
-      </ComposedChart>
-    );
   };
 
   return (
     <div
-      className="cyberpunk-card p-2 h-100 relative overflow-hidden"
+      className="cyberpunk-card-base p-2 h-100 relative overflow-hidden"
       style={{
         backgroundColor: 'rgba(10, 11, 30, 0.9)',
         borderRadius: '12px',
         border: '1px solid #05d9e8',
+        minHeight: '500px',
       }}
     >
+      {/* Tooltip 组件 */}
+      {tooltipVisible && tooltipPoint && (
+        <MemoizedTooltip
+          point={tooltipPoint}
+          visible={tooltipVisible}
+          x={tooltipPosition.x}
+          y={tooltipPosition.y}
+          baseSymbol={baseToken.symbol}
+          quoteSymbol={quoteToken.symbol}
+        />
+      )}
+
       <div className="flex justify-between items-center mb-2">
         <h3
-          className="cyberpunk-title text-xl"
+          className="cyberpunk-title text-xl mr-2"
           style={{
             background: 'linear-gradient(to right, #05d9e8, #c16ecf)',
             WebkitBackgroundClip: 'text',
@@ -542,9 +535,29 @@ const YiDengCoinChart = () => {
             fontWeight: 'bold',
           }}
         >
-          YIDENG COIN
+          {/* 显示当前图表类型 - 替换嵌套三元表达式 */}
+          YIDENG COIN{' '}{getChartTypeText()}
         </h3>
         <div className="flex space-x-2">
+          {/* 时间周期选择按钮 */}
+          <div className="flex space-x-1">
+            {['5m', '15m', '1h', '4h', '1d'].map(tf => (
+              <button
+                key={tf}
+                onClick={() => handleTimeframeChange(tf as '5m' | '15m' | '1h' | '4h' | '1d')}
+                className={`text-xs px-2 py-1 rounded ${
+                  timeframe === tf
+                    ? 'bg-gray-700 text-neon-blue'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+                style={{ border: timeframe === tf ? '1px solid #05d9e8' : '1px solid #333' }}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+
+          {/* 图表类型切换按钮 */}
           <button
             onClick={toggleChartMode}
             className="text-xs bg-gray-800 px-2 py-1 rounded text-neon-blue hover:bg-gray-700"
@@ -556,47 +569,41 @@ const YiDengCoinChart = () => {
       </div>
 
       <div className="text-xs text-gray-400 mb-2">
-        {crosshairValues ? (
-          <div className="flex justify-between">
-            <span className="text-neon-blue">
-              {crosshairValues.data.date} • ${crosshairValues.data.price.toFixed(2)}
+        <div className="flex justify-between">
+          <span className="text-neon-blue">
+            {currentDate} • ${currentPrice ? currentPrice.toFixed(5) : '0.00000'}
+          </span>
+          <span className="text-neon-green">
+            24h:
+            <span className={priceChange >= 0 ? 'text-green-400' : 'text-red-400'}>
+              {priceChange >= 0 ? '+' : ''}
+              {priceChange.toFixed(2)}%
             </span>
-            <span className="text-neon-green">
-              24h: <span className="text-red-400">-12.43%</span>
-            </span>
-          </div>
-        ) : (
-          <div className="flex justify-between">
-            <span className="text-neon-blue">
-              {currentDate} • ${data.length > 0 ? data[data.length - 1].price.toFixed(2) : '0.00'}
-            </span>
-            <span className="text-neon-green">
-              24h: <span className="text-red-400">-12.43%</span>
-            </span>
-          </div>
-        )}
+          </span>
+        </div>
       </div>
 
+      {/* 加载状态 */}
+      {(isPending || isLoading) && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
+          <div className="text-neon-blue">加载中...</div>
+        </div>
+      )}
+
+      {/* 错误提示 */}
+      {error && <div className="text-red-500 text-sm mb-2">错误: {error} (显示模拟数据)</div>}
+
+      {/* 图表容器 */}
       <div
-        ref={chartRef}
-        style={{ backgroundColor: '#0a0b1e', borderRadius: '8px', height: '90%' }}
-      >
-        <ResponsiveContainer width="100%" height="90%">
-          {renderChart()}
-        </ResponsiveContainer>
-      </div>
-
-      {/* 价格指标 */}
-      <div className="absolute bottom-4 right-4 flex space-x-4">
-        <div className="text-xs">
-          <span className="text-gray-400">{t('chart.marketCap')}: </span>
-          <span className="text-neon-green">$45.2M</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-gray-400">{t('chart.24hVol')}: </span>
-          <span className="text-neon-blue">$3.8M</span>
-        </div>
-      </div>
+        ref={chartContainerRef}
+        style={{
+          backgroundColor: '#0a0b1e',
+          borderRadius: '8px',
+          height: '400px',
+          width: '100%',
+          position: 'relative', // 为了正确定位 tooltip
+        }}
+      />
     </div>
   );
 };

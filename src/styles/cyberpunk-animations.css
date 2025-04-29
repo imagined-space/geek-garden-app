@@ -58,3 +58,48 @@
     opacity: 0;
   }
 }
+
+/* G 文字的渐变色彩动画 */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* G 文字的故障效果动画 */
+@keyframes glitch-animation {
+  0% {
+    transform: translateX(0) skew(0deg);
+    opacity: 0.3;
+  }
+  20% {
+    transform: translateX(-2px) skew(1deg);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateX(2px) skew(-1deg);
+    opacity: 0.3;
+  }
+  60% {
+    transform: translateX(0) skew(0.5deg);
+    opacity: 0.2;
+  }
+  80% {
+    transform: translateX(-1px) skew(-0.5deg);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateX(0) skew(0deg);
+    opacity: 0.3;
+  }
+}
+
+.cyberpunk-glitch-clip {
+  clip-path: inset(0);
+}

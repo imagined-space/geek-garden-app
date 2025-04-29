@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useWallet } from './useWallet';
 import { User, AuthState } from '@/types/wallet';
 import { useSignMessage } from 'wagmi';
 import { getEnsName } from 'viem/ens';
+import { useWallet } from './useWallet';
 
 // 定义API基础URL（可考虑移至环境配置文件中）
 // const API_BASE_URL = 'http://localhost:3001/dev';

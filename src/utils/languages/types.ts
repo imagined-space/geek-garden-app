@@ -13,6 +13,7 @@ export type LanguageContextType = {
 // 语言提供者组件属性
 export interface LanguageProviderProps {
   children: ReactNode;
+  initialLanguage: string; // 使用可选参数
 }
 
 // 翻译对象类型

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { walletConnectedAtom } from '@/stores/walletStore';
 import { useTokenExchange } from '@/hooks/useTokenExchange';
@@ -138,7 +138,7 @@ export const TokenExchange: React.FC = () => {
   return (
     <NeonCard>
       <h2 className="text-4xl font-bold text-white mb-6">
-        {isBuying ? t('tokenExchange.buyYD') : t('tokenExchange.exchangeETH')}
+        {isBuying ? t('tokenExchange.buyG') : t('tokenExchange.exchangeETH')}
       </h2>
 
       <div className="flex flex-col md:flex-row justify-between items-center mb-6">
@@ -242,7 +242,7 @@ export const TokenExchange: React.FC = () => {
 
       <div className="flex justify-between items-center">
         <p className="text-[#00ffff] group-hover:text-[#ff00ff] transition-colors duration-300">
-          {t('tokenExchange.estimated')}: {estimatedValue} {isBuying ? 'YD' : 'ETH'}
+          {t('tokenExchange.estimated')}: {estimatedValue} {isBuying ? 'G' : 'ETH'}
         </p>
         <NeonButton onClick={handleConfirmClick} disabled={isButtonDisabled}>
           {getButtonText(isPending, isConfirming, t)}

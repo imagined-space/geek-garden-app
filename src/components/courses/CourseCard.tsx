@@ -12,13 +12,12 @@ export default function CourseCard(props: { item: Course }) {
   const { item } = props;
   const [, purchaseCourseWeb2] = useAtom(purchaseCourseAction);
   const [, updateCourse] = useAtom(updateCourseAction);
-  const { getAllCourses, isLoading } = useCourseContract();
+  const {  purchaseCourse: purchaseCourseWeb3, getAllCourses, isLoading } = useCourseContract();
 
   const handlePurchase = async (web2CourseId: string) => {
     try {
-      // 乐观更新
       purchaseCourseWeb2(web2CourseId);
-      // 乐观更新
+      await purchaseCourseWeb3(web2CourseId);
       toast.success('shop success');
       // 刷新课程列表
       getAllCourses();
@@ -73,7 +72,7 @@ export default function CourseCard(props: { item: Course }) {
           <p className="text-gray-400 mb-4 line-clamp-7">{item.description}</p>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-neon-green font-semibold">YD{item.price}</span>
+          <span className="text-neon-green font-semibold">G{item.price}</span>
           <button
             className={`cyberpunk-button px-3 py-1 text-sm rounded ${item.isPurchased ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => handlePurchase(item.web2CourseId)}

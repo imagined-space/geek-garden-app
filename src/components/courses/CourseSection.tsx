@@ -15,7 +15,7 @@ const CourseSection: React.FC<CourseSectionProps> = () => {
   const [courses] = useAtom(coursesAtom);
 
   return (
-    <section className="bg-darker-bg relative py-12">
+    <section className="bg-darker-bg relative">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <h2
           className="cyberpunk-title text-3xl font-bold mb-8 text-center"

@@ -8,7 +8,7 @@ import { MetaMask } from '@web3-react/metamask';
 import Link from 'next/link';
 
 // 导入合约 ABI
-import YiDengTokenABI from '@/contracts/abis/YiDengToken.json';
+import GeekTokenABI from '@/contracts/abis/GeekToken.json';
 import CourseMarketABI from '@/contracts/abis/CourseMarket.json';
 import { CONTRACT_ADDRESSES } from '@/config/contracts';
 // 定义一个自定义类型来处理区块链错误
@@ -27,7 +27,7 @@ const ContractTestPage = () => {
 
   // 状态管理
   const [tokenBalance, setTokenBalance] = useState<string>('0');
-  const [ydCoin, setYdCoin] = useState<string>(CONTRACT_ADDRESSES.SEPOLIA.YIDENG_TOKEN);
+  const [ydCoin, setYdCoin] = useState<string>(CONTRACT_ADDRESSES.SEPOLIA.GEEK_TOKEN);
   const [txHash, setTxHash] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -105,10 +105,10 @@ const ContractTestPage = () => {
     setError('');
 
     try {
-      const tokenContract = new Contract(ydCoin, YiDengTokenABI.abi, provider);
+      const tokenContract = new Contract(ydCoin, GeekTokenABI.abi, provider);
       const balance = await tokenContract.balanceOf(account);
       setTokenBalance(formatUnits(balance, 0)); // 使用 formatUnits 替代 utils.formatUnits
-      addLog(`获取到代币余额: ${formatUnits(balance, 0)} YD`);
+      addLog(`获取到代币余额: ${formatUnits(balance, 0)} G`);
     } catch (err) {
       setError('获取代币余额失败');
       addLog(`获取代币余额失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -129,7 +129,7 @@ const ContractTestPage = () => {
 
     try {
       const signer = provider.getSigner();
-      const tokenContract = new Contract(ydCoin, YiDengTokenABI.abi, signer);
+      const tokenContract = new Contract(ydCoin, GeekTokenABI.abi, signer);
 
       // 添加错误处理和日志
       addLog(`准备购买代币，合约地址: ${ydCoin}`);
@@ -248,7 +248,7 @@ const ContractTestPage = () => {
     setError('');
 
     try {
-      const tokenContract = new Contract(ydCoin, YiDengTokenABI.abi, provider);
+      const tokenContract = new Contract(ydCoin, GeekTokenABI.abi, provider);
 
       // 获取代币基本信息
       const name = await tokenContract.name();
@@ -298,7 +298,7 @@ const ContractTestPage = () => {
 
     try {
       const signer = provider.getSigner();
-      const tokenContract = new Contract(ydCoin, YiDengTokenABI.abi, signer);
+      const tokenContract = new Contract(ydCoin, GeekTokenABI.abi, signer);
 
       // 执行转账
       const tx = await tokenContract.transfer(transferTo, transferAmount);
@@ -401,7 +401,7 @@ const ContractTestPage = () => {
       setError('请先连接钱包并输入Web2课程ID');
       return;
     }
-    let web2CourseId = '1';
+    const web2CourseId = '1';
 
     setLoading(true);
     setError('');
@@ -409,8 +409,8 @@ const ContractTestPage = () => {
     try {
       const signer = provider.getSigner();
       const marketContract = new Contract(marketAddress, CourseMarketABI.abi, signer);
-      const tokenAddress = await marketContract.yiDengToken();
-      const tokenContract = new Contract(tokenAddress, YiDengTokenABI.abi, signer);
+      const tokenAddress = await marketContract.geekToken();
+      const tokenContract = new Contract(tokenAddress, GeekTokenABI.abi, signer);
 
       // 获取课程ID和价格
       const courseId = await marketContract.web2ToCourseId(web2CourseId);
@@ -421,13 +421,13 @@ const ContractTestPage = () => {
       const course = await marketContract.courses(courseId);
       const { price } = course;
 
-      addLog(`准备购买课程: ${course.name} (ID: ${courseId}), 价格: ${formatUnits(price, 0)} YD`);
+      addLog(`准备购买课程: ${course.name} (ID: ${courseId}), 价格: ${formatUnits(price, 0)} G`);
 
       // 检查代币余额
       const balance = await tokenContract.balanceOf(account);
       if (balance.lt(price)) {
         throw new Error(
-          `YD代币余额不足，需要 ${formatUnits(price, 0)} YD，当前余额: ${formatUnits(balance, 0)} YD`,
+          `G代币余额不足，需要 ${formatUnits(price, 0)} G，当前余额: ${formatUnits(balance, 0)} G`,
         );
       }
 
@@ -545,8 +545,8 @@ const ContractTestPage = () => {
       setError('请先输入市场合约地址、Web2课程ID和学生地址');
       return;
     }
-    let web2CourseId = '1';
-    let studentAddress = account;
+    const web2CourseId = '1';
+    const studentAddress = account;
     console.log('web2CourseId', web2CourseId);
     console.log('studentAddress', studentAddress);
 
@@ -799,15 +799,15 @@ const updateCourse = async () => {
             {account && (
               <div className="flex items-center">
                 <span className="text-sm text-gray-600 mr-2">当前代币余额:</span>
-                <span className="text-sm font-mono p-1 rounded">{tokenBalance || '0'} YD</span>
+                <span className="text-sm font-mono p-1 rounded">{tokenBalance || '0'} G</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* YiDengToken 测试部分 - 增强版 */}
+        {/* GeekToken 测试部分 - 增强版 */}
         <div className="mb-8 p-4 border border-gray-200 rounded-md">
-          <h2 className="text-xl font-semibold mb-4">YiDengToken 测试</h2>
+          <h2 className="text-xl font-semibold mb-4">GeekToken 测试</h2>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">代币合约地址</label>
@@ -816,7 +816,7 @@ const updateCourse = async () => {
                 type="text"
                 value={ydCoin}
                 onChange={e => setYdCoin(e.target.value)}
-                placeholder="输入YiDengToken合约地址"
+                placeholder="输入GeekToken合约地址"
                 className="flex-1 p-2 border border-gray-300 rounded "
               />
               <button
@@ -883,7 +883,7 @@ const updateCourse = async () => {
             <h3 className="text-md font-medium mb-2">写操作</h3>
             <div className="flex flex-wrap gap-2 mb-3">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">购买金额(默认100YD币)</label>
+                <label className="block text-xs text-gray-600 mb-1">购买金额(默认100G币)</label>
                 <input
                   type="number"
                   value={purchaseAmount}
@@ -1003,7 +1003,7 @@ const updateCourse = async () => {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">课程价格 (YD代币)</label>
+                <label className="block text-xs text-gray-600 mb-1">课程价格 (G代币)</label>
                 <input
                   type="number"
                   value={coursePrice}
@@ -1055,7 +1055,7 @@ const updateCourse = async () => {
       />
     </div>
     <div>
-      <label className="block text-xs text-gray-600 mb-1">课程价格 (YD代币)</label>
+      <label className="block text-xs text-gray-600 mb-1">课程价格 (G代币)</label>
       <input
         type="number"
         value={coursePrice}
@@ -1172,7 +1172,7 @@ const updateCourse = async () => {
               <div className="space-y-2">
                 {allCourses.map((course, index:number) => (
                   <div key={index} className="text-sm">
-                    {course.name} - {course.price} YD
+                    {course.name} - {course.price} G
                   </div>
                 ))}
               </div>

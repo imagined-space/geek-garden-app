@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useAccount, useChainId, useConnect } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { toast } from 'react-hot-toast';
 import { useAtom } from 'jotai';
 import { isAuthenticatedAtom, walletAddressAtom, syncWalletStateAtom } from '@/stores/walletStore';

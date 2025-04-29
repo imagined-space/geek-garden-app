@@ -72,6 +72,14 @@
 }
 
 /* 赛博朋克卡片 */
+/* 赛博朋克卡片 - 基础样式 */
+.cyberpunk-card-base {
+  background: rgba(13, 2, 33, 0.8);
+  border: 1px solid var(--neon-blue);
+  box-shadow: 0 0 15px rgba(5, 217, 232, 0.2);
+}
+
+/* 交互式卡片 - 包含悬停效果 */
 .cyberpunk-card {
   background: rgba(13, 2, 33, 0.8);
   border: 1px solid var(--neon-blue);
