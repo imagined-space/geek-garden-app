@@ -39,3 +39,5 @@ const MarketPage = () => {
 };
 
 export default MarketPage;
+
+export const runtime = 'edge';

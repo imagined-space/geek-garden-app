@@ -20,6 +20,7 @@ export default [
     'plugin:react-hooks/recommended',
     'next/core-web-vitals',
     'prettier',
+    'plugin:eslint-plugin-next-on-pages/recommended',
   ),
   // 特殊规则：为枚举类型文件禁用未使用变量检查
   {
@@ -129,6 +130,12 @@ export default [
 
       // 解决Next.js Image组件问题的规则
       '@next/next/no-img-element': 'off', // 禁用img标签检查
+       "no-continue": "off"
+    },
+  },
+  {
+    plugins: {
+      'eslint-plugin-next-on-pages': {},
     },
   },
 ];

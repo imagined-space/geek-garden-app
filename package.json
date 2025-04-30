@@ -1,7 +1,6 @@
 {
   "name": "web3-university-app",
   "version": "0.1.0",
-  "packageManager": "yarn@1.22.19",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -14,9 +13,13 @@
     "lint:fix": "eslint --ext .js,.jsx,.ts,.tsx src --fix",
     "lint:style": "stylelint \"**/*.{css,less,scss,sass}\"",
     "format": "prettier --write \"**/*.{js,.jsx,.ts,.tsx,json,css,less,scss,sass}\"",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "pages:build": "npx @cloudflare/next-on-pages",
+    "preview": "npm run pages:build && wrangler pages dev",
+    "deploy": "npm run pages:build && wrangler pages deploy"
   },
   "dependencies": {
+    "@cloudflare/next-on-pages": "^1.13.12",
     "@ethersproject/bignumber": "^5.8.0",
     "@ethersproject/contracts": "^5.8.0",
     "@ethersproject/units": "^5.8.0",
@@ -26,6 +29,7 @@
     "@web3-react/metamask": "^8.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "eslint-plugin-next-on-pages": "^1.13.12",
     "ethers": "^6.13.5",
     "jotai": "^2.12.2",
     "lightweight-charts": "^5.0.6",

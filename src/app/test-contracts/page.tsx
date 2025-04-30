@@ -1214,3 +1214,5 @@ export default function TestContractsPage() {
     </Web3ReactProvider>
   );
 }
+
+export const runtime = 'edge';
