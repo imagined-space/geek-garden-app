@@ -189,7 +189,7 @@ export function useCourseContract() {
         throw new Error('无法获取课程信息');
       }
       
-      const price = course.price;
+      const {price} = course;
       
       // 检查代币余额
       const balance:any = await publicClient.readContract({
