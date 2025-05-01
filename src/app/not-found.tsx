@@ -5,3 +5,4 @@ const NotFound = () => (
 );
 
 export default NotFound;
+export const runtime = 'edge';

@@ -3,46 +3,46 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "./YiDengToken.sol";
+import "./GeekToken.sol";
 import "./CourseCertificate.sol";
 
 /**
  * @title CourseMarket
- * @dev 一灯教育课程市场合约
- * 管理课程的添加、购买和完成认证流程
+ * @dev Course marketplace contract for Geek University
+ * Manages course addition, purchase and certification processes
  */
 contract CourseMarket is Ownable {
-    // 合约实例
-    YiDengToken public yiDengToken;      // YiDeng代币合约实例
-    CourseCertificate public certificate; // 证书NFT合约实例
+    // Contract instances
+    GeekToken public geekToken;      // Geek token contract instance
+    CourseCertificate public certificate; // Certificate NFT contract instance
 
     /**
-     * @dev 课程结构体，存储课程的详细信息
-     * @param web2CourseId Web2平台的课程ID，用于关联线上课程
-     * @param name 课程名称
-     * @param price 课程价格(YD代币)
-     * @param isActive 课程是否可购买
-     * @param creator 课程创建者地址，接收课程购买收入
+     * @dev Course struct to store course details
+     * @param web2CourseId Course ID from Web2 platform to link with online course
+     * @param name Course name
+     * @param price Course price in G tokens
+     * @param isActive Whether course is available for purchase
+     * @param creator Course creator address who receives purchase income
      */
     struct Course {
-        string web2CourseId; // Web2平台的课程ID
-        string name; // 课程名称
-        uint256 price; // 课程价格(YD代币)
-        bool isActive; // 课程是否可购买
-        address creator; // 课程创建者地址
+        string web2CourseId; // Course ID from Web2 platform
+        string name; // Course name
+        uint256 price; // Course price in G tokens
+        bool isActive; // Whether course is available for purchase
+        address creator; // Course creator address
     }
 
-    // 合约状态变量
-    mapping(uint256 => Course) public courses; // courseId => Course，存储所有课程
-    mapping(string => uint256) public web2ToCourseId; // web2CourseId => courseId，Web2课程ID到链上ID的映射
-    mapping(address => mapping(uint256 => bool)) public userCourses; // 用户购买记录：用户地址 => 课程ID => 是否已购买
-    uint256 public courseCount; // 课程总数，同时用作新课程的ID
+    // Contract state variables
+    mapping(uint256 => Course) public courses; // courseId => Course, stores all courses
+    mapping(string => uint256) public web2ToCourseId; // web2CourseId => courseId, mapping from Web2 course ID to chain ID
+    mapping(address => mapping(uint256 => bool)) public userCourses; // User purchase records: user address => course ID => purchased status
+    uint256 public courseCount; // Total course count, also used as new course ID
 
     /**
-     * @dev 课程购买事件，当用户购买课程时触发
-     * @param buyer 购买者地址
-     * @param courseId 课程ID
-     * @param web2CourseId Web2平台的课程ID
+     * @dev Course purchase event, emitted when user purchases a course
+     * @param buyer Buyer address
+     * @param courseId Course ID
+     * @param web2CourseId Course ID from Web2 platform
      */
     event CoursePurchased(
         address indexed buyer,
@@ -51,10 +51,10 @@ contract CourseMarket is Ownable {
     );
     
     /**
-     * @dev 课程完成事件，当学生完成课程并获得证书时触发
-     * @param student 学生地址
-     * @param courseId 课程ID
-     * @param certificateId 颁发的证书ID
+     * @dev Course completion event, emitted when student completes course and receives certificate
+     * @param student Student address
+     * @param courseId Course ID
+     * @param certificateId Issued certificate ID
      */
     event CourseCompleted(
         address indexed student,
@@ -63,10 +63,10 @@ contract CourseMarket is Ownable {
     );
     
     /**
-     * @dev 课程添加事件，当新课程被添加到市场时触发
-     * @param courseId 课程ID
-     * @param web2CourseId Web2平台的课程ID
-     * @param name 课程名称
+     * @dev Course addition event, emitted when new course is added to marketplace
+     * @param courseId Course ID
+     * @param web2CourseId Course ID from Web2 platform
+     * @param name Course name
      */
     event CourseAdded(
         uint256 indexed courseId,
@@ -84,21 +84,21 @@ contract CourseMarket is Ownable {
     );
 
     /**
-     * @dev 构造函数
-     * @param _tokenAddress YiDeng代币合约地址
-     * @param _certificateAddress 证书NFT合约地址
+     * @dev Constructor
+     * @param _tokenAddress Geek token contract address
+     * @param _certificateAddress Certificate NFT contract address
      */
     constructor(address _tokenAddress, address _certificateAddress) {
-        yiDengToken = YiDengToken(payable(_tokenAddress));
+        geekToken = GeekToken(payable(_tokenAddress));
         certificate = CourseCertificate(payable(_certificateAddress));
     }
 
     /**
-     * @dev 添加新课程到市场
-     * 只有合约所有者可以调用此函数
-     * @param web2CourseId Web2平台的课程ID
-     * @param name 课程名称
-     * @param price 课程价格(YD代币)
+     * @dev Add new course to marketplace
+     * Only contract owner can call this function
+     * @param web2CourseId Course ID from Web2 platform
+     * @param name Course name
+     * @param price Course price in G tokens
      */
     function addCourse(
         string memory web2CourseId,
@@ -127,12 +127,12 @@ contract CourseMarket is Ownable {
     }
 
     /**
-     * @dev 修改课程
-     * 只有合约所有者可以调用此函数
-     * @param oldWeb2CourseId 旧的Web2平台的课程ID
-     * @param newWeb2CourseId 新的Web2平台的课程ID
-     * @param name 课程名称
-     * @param price 课程价格(YD代币)
+     * @dev Update course details
+     * Only contract owner can call this function
+     * @param oldWeb2CourseId Old course ID from Web2 platform
+     * @param newWeb2CourseId New course ID from Web2 platform
+     * @param name Course name
+     * @param price Course price in G tokens
      */
     function updateCourse(
         string memory oldWeb2CourseId,
@@ -163,14 +163,13 @@ contract CourseMarket is Ownable {
 
         web2ToCourseId[oldWeb2CourseId] = 0;
         web2ToCourseId[newWeb2CourseId] = courseId;
-
         emit CourseUpdated(courseId, oldWeb2CourseId, newWeb2CourseId, name, price, isActive);
     }
 
     /**
-     * @dev 用户购买课程
-     * 用户需要先授权合约使用其YD代币
-     * @param web2CourseId Web2平台的课程ID
+     * @dev Purchase course
+     * User needs to approve contract to spend their G tokens first
+     * @param web2CourseId Course ID from Web2 platform
      */
     function purchaseCourse(string memory web2CourseId) external {
         uint256 courseId = web2ToCourseId[web2CourseId];
@@ -180,9 +179,9 @@ contract CourseMarket is Ownable {
         require(course.isActive, "Course not active");
         require(!userCourses[msg.sender][courseId], "Already purchased");
 
-        // 转移代币从用户到课程创建者
+        // Transfer tokens from user to course creator
         require(
-            yiDengToken.transferFrom(msg.sender, course.creator, course.price),
+            geekToken.transferFrom(msg.sender, course.creator, course.price),
             "Transfer failed"
         );
 
@@ -191,10 +190,10 @@ contract CourseMarket is Ownable {
     }
 
     /**
-     * @dev 验证课程完成并发放证书
-     * 只有合约所有者可以调用此函数，确认学生已完成课程
-     * @param student 学生地址
-     * @param web2CourseId Web2平台的课程ID
+     * @dev Verify course completion and issue certificate
+     * Only contract owner can call this function to confirm student completion
+     * @param student Student address
+     * @param web2CourseId Course ID from Web2 platform
      */
     function verifyCourseCompletion(
         address student,
@@ -208,13 +207,13 @@ contract CourseMarket is Ownable {
             "Certificate already issued"
         );
 
-        // 生成证书元数据URI
+        // Generate certificate metadata URI
         string memory metadataURI = generateCertificateURI(
             student,
             web2CourseId
         );
         
-        // 铸造证书NFT
+        // Mint certificate NFT
         uint256 tokenId = certificate.mintCertificate(
             student,
             web2CourseId,
@@ -225,32 +224,32 @@ contract CourseMarket is Ownable {
     }
 
     /**
-     * @dev 批量验证课程完成
-     * 允许一次性为多个学生验证课程完成并发放证书
-     * @param students 学生地址数组
-     * @param web2CourseId Web2平台的课程ID
+     * @dev Batch verify course completion
+     * Allows verifying completion and issuing certificates for multiple students at once
+     * @param students Array of student addresses
+     * @param web2CourseId Course ID from Web2 platform
      */
     function batchVerifyCourseCompletion(
         address[] memory students,
         string memory web2CourseId
     ) external onlyOwner {
         for (uint256 i = 0; i < students.length; i++) {
-            // 检查学生是否已购买课程且尚未获得证书
+            // Check if student has purchased course and hasn't received certificate
             if (
                 userCourses[students[i]][web2ToCourseId[web2CourseId]] &&
                 !certificate.hasCertificate(students[i], web2CourseId)
             ) {
-                // 使用 this 关键字调用 external 函数
+                // Use 'this' keyword to call external function
                 this.verifyCourseCompletion(students[i], web2CourseId);
             }
         }
     }
 
     /**
-     * @dev 检查用户是否已购买课程
-     * @param user 用户地址
-     * @param web2CourseId Web2平台的课程ID
-     * @return bool 如果用户已购买该课程则返回true
+     * @dev Check if user has purchased course
+     * @param user User address
+     * @param web2CourseId Course ID from Web2 platform
+     * @return bool Returns true if user has purchased the course
      */
     function hasCourse(
         address user,
@@ -262,11 +261,11 @@ contract CourseMarket is Ownable {
     }
 
     /**
-     * @dev 生成证书元数据URI
-     * 创建指向证书元数据的URI，包含课程ID和学生地址
-     * @param student 学生地址
-     * @param web2CourseId Web2平台的课程ID
-     * @return string 生成的元数据URI
+     * @dev Generate certificate metadata URI
+     * Creates URI pointing to certificate metadata containing course ID and student address
+     * @param student Student address
+     * @param web2CourseId Course ID from Web2 platform
+     * @return string Generated metadata URI
      */
     function generateCertificateURI(
         address student,
@@ -275,7 +274,7 @@ contract CourseMarket is Ownable {
         return
             string(
                 abi.encodePacked(
-                    "https://api.yideng.com/certificate/",
+                    "https://api.geek.com/certificate/",
                     web2CourseId,
                     "/",
                     Strings.toHexString(student)

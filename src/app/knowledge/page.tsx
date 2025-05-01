@@ -374,3 +374,5 @@ const KnowledgeBasePage = () => {
 };
 
 export default KnowledgeBasePage;
+
+export const runtime = 'edge';
