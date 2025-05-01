@@ -35,3 +35,31 @@ export interface ParticlesBackgroundProps {
   motionIntensity?: 'high' | 'normal' | 'low'; // 运动强度
   colorTransition?: Partial<ColorTransition>; // 颜色变化配置
 }
+
+// Worker 消息类型定义
+export interface WorkerMessage<T = any> {
+  task: string;
+  result: T;
+  error?: string;
+}
+
+// 初始数据类型
+export interface InitialParticleData {
+  initialPositions: Float32Array;
+  scales: Float32Array;
+  phases: Float32Array;
+  speeds: Float32Array;
+  opacities: Float32Array;
+  vertexColors: Float32Array;
+}
+
+// 更新数据类型
+export interface AnimationUpdateData {
+  time: number;
+  colors: number[][];
+}
+
+// Worker 消息处理的通用类型
+export type WorkerMessageHandler<T = any> = (e: MessageEvent<WorkerMessage<T>>) => void;
+
+
