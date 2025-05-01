@@ -8,10 +8,10 @@ import {
   InitialParticleData,
   AnimationUpdateData,
 } from '@/types/particles';
+import { createParticleWorker } from '@/utils/particles-worker';
 import { PERFORMANCE_CONFIG, PARTICLE_GROUP_PRESETS, DEFAULT_COLOR_TRANSITION } from './constants';
 import { detectPerformanceLevel } from './usePerformance';
 import { loadTextures } from './textureLoader';
-import { createParticleWorker } from '@/utils/particles-worker';
 
 // ----------------- 单例控制器 -----------------
 let sceneInstance: THREE.Scene | null = null;
@@ -291,7 +291,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       globalMotion: { time: number; amplitude: number },
     ): void {
       const material = instancedMesh.material as THREE.ShaderMaterial;
-      const userData = instancedMesh.userData;
+      const {userData} = instancedMesh;
 
       // 更新时间
       userData.time += delta;
