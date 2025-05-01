@@ -1,15 +1,17 @@
-"use client";
+'use client';
 
 import React, { useEffect, useRef, memo, useState, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
-import { ParticlesBackgroundProps } from '@/types/particles';
 import {
-  PERFORMANCE_CONFIG,
-  PARTICLE_GROUP_PRESETS,
-  DEFAULT_COLOR_TRANSITION,
-} from './constants';
+  ParticlesBackgroundProps,
+  WorkerMessageHandler,
+  InitialParticleData,
+  AnimationUpdateData,
+} from '@/types/particles';
+import { PERFORMANCE_CONFIG, PARTICLE_GROUP_PRESETS, DEFAULT_COLOR_TRANSITION } from './constants';
 import { detectPerformanceLevel } from './usePerformance';
 import { loadTextures } from './textureLoader';
+import { createParticleWorker } from '@/utils/particles-worker';
 
 // ----------------- 单例控制器 -----------------
 let sceneInstance: THREE.Scene | null = null;
@@ -19,6 +21,7 @@ let instancedMeshGroups: THREE.InstancedMesh[] = [];
 let loadedTextures: Record<string, THREE.Texture> = {};
 let isInitialized = false;
 let animationFrameId: number | null = null;
+let worker: Worker | null = null;
 
 // 顶点着色器
 const vertexShader = `
@@ -102,7 +105,7 @@ const fragmentShader = `
   varying vec2 vUv;
   
   void main() {
-    // 获取纹理颜色 - 使用正确的纹理坐标 vUv
+    // 获取纹理颜色
     vec4 texColor = texture2D(map, vUv);
     
     // 混合实例颜色和基础颜色
@@ -120,10 +123,13 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
     const [isLoaded, setIsLoaded] = useState(false);
 
     // 使用 useMemo 来避免在每次渲染时重新创建 colorConfig 对象
-    const colorConfig = useMemo(() => ({
-      ...DEFAULT_COLOR_TRANSITION,
-      ...colorTransition,
-    }), [colorTransition]);
+    const colorConfig = useMemo(
+      () => ({
+        ...DEFAULT_COLOR_TRANSITION,
+        ...colorTransition,
+      }),
+      [colorTransition],
+    );
 
     // 使用 useCallback 避免在每次渲染时重新创建函数
     const getDensityMultiplier = useCallback(() => {
@@ -183,100 +189,98 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       textureKey: string,
       pulseFrequency: number,
       pulseAmplitude: number,
-    ): void {
-      if (!sceneInstance) return;
+    ): Promise<void> {
+      return new Promise(resolve => {
+        if (!sceneInstance || !worker) {
+          resolve();
+          return;
+        }
 
-      // 创建几何体 - 使用平面几何体
-      const geometry = new THREE.PlaneGeometry(size, size);
-      
-      // 为每个实例创建数据数组
-      const initialPositions = new Float32Array(count * 3);
-      const scales = new Float32Array(count);
-      const phases = new Float32Array(count);
-      const speeds = new Float32Array(count);
-      const opacities = new Float32Array(count);
-      const vertexColors = new Float32Array(count * 3);
-      
-      // 为每个实例设置数据
-      for (let i = 0; i < count; i++) {
-        // 在球体中随机分布
-        const radius = Math.random() * range;
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
+        // 创建几何体 - 使用平面几何体
+        const geometry = new THREE.PlaneGeometry(size, size);
 
-        const posX = radius * Math.sin(phi) * Math.cos(theta);
-        const posY = radius * Math.sin(phi) * Math.sin(theta);
-        const posZ = radius * Math.cos(phi);
-
-        // 设置初始位置
-        initialPositions[i * 3] = posX;
-        initialPositions[i * 3 + 1] = posY;
-        initialPositions[i * 3 + 2] = posZ;
-        
-        // 设置其他属性
-        scales[i] = Math.random() * 2 + 0.5;
-        phases[i] = Math.random() * Math.PI * 2;
-        speeds[i] = Math.random() * 0.01 + 0.005;
-        opacities[i] = Math.random() * (maxOpacity - minOpacity) + minOpacity;
-        
-        // 颜色变化 - 基于主色调的微妙变化
+        // 使用 Worker 生成初始数据
         const hsl = { h: 0, s: 0, l: 0 };
         color.getHSL(hsl);
-        const hueVariation = Math.random() * 0.1 - 0.05; // ±5%色相变化
-        const particleColor = new THREE.Color().setHSL(
-          (hsl.h + hueVariation) % 1.0,
-          0.7 + Math.random() * 0.3, // 饱和度70-100%
-          0.5 + Math.random() * 0.3, // 亮度50-80%
-        );
-        
-        vertexColors[i * 3] = particleColor.r;
-        vertexColors[i * 3 + 1] = particleColor.g;
-        vertexColors[i * 3 + 2] = particleColor.b;
-      }
-      
-      // 添加自定义属性到几何体
-      geometry.setAttribute('initialPosition', new THREE.InstancedBufferAttribute(initialPositions, 3));
-      geometry.setAttribute('scale', new THREE.InstancedBufferAttribute(scales, 1));
-      geometry.setAttribute('phase', new THREE.InstancedBufferAttribute(phases, 1));
-      geometry.setAttribute('speed', new THREE.InstancedBufferAttribute(speeds, 1));
-      geometry.setAttribute('opacity', new THREE.InstancedBufferAttribute(opacities, 1));
-      geometry.setAttribute('vertexColor', new THREE.InstancedBufferAttribute(vertexColors, 3));
-      
-      // 创建自定义 shader 材质
-      const material = new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: loadedTextures[textureKey] },
-          time: { value: Math.random() * 1000 },
-          pulseFactor: { value: 1.0 },
-          waveAmplitude: { value: waveAmplitude },
-          waveSpeed: { value: waveSpeed },
-          focalPoint: { value: new THREE.Vector3(0, 0, 0) },
-          globalMotion: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
-          baseColor: { value: color }
-        },
-        vertexShader,
-        fragmentShader,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+
+        worker.postMessage({
+          task: 'generateInitialData',
+          data: {
+            count,
+            range,
+            minOpacity,
+            maxOpacity,
+            color: hsl,
+          },
+        });
+
+        // 监听 Worker 返回的数据
+        const workerHandler: WorkerMessageHandler<InitialParticleData> = e => {
+          const { task, result } = e.data;
+
+          if (task === 'generateInitialData') {
+            const { initialPositions, scales, phases, speeds, opacities, vertexColors } = result;
+
+            // 添加自定义属性到几何体
+            geometry.setAttribute(
+              'initialPosition',
+              new THREE.InstancedBufferAttribute(initialPositions, 3),
+            );
+            geometry.setAttribute('scale', new THREE.InstancedBufferAttribute(scales, 1));
+            geometry.setAttribute('phase', new THREE.InstancedBufferAttribute(phases, 1));
+            geometry.setAttribute('speed', new THREE.InstancedBufferAttribute(speeds, 1));
+            geometry.setAttribute('opacity', new THREE.InstancedBufferAttribute(opacities, 1));
+            geometry.setAttribute(
+              'vertexColor',
+              new THREE.InstancedBufferAttribute(vertexColors, 3),
+            );
+
+            // 创建自定义 shader 材质
+            const material = new THREE.ShaderMaterial({
+              uniforms: {
+                map: { value: loadedTextures[textureKey] },
+                time: { value: Math.random() * 1000 },
+                pulseFactor: { value: 1.0 },
+                waveAmplitude: { value: waveAmplitude },
+                waveSpeed: { value: waveSpeed },
+                focalPoint: { value: new THREE.Vector3(0, 0, 0) },
+                globalMotion: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
+                baseColor: { value: color },
+              },
+              vertexShader,
+              fragmentShader,
+              transparent: true,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+              side: THREE.DoubleSide,
+            });
+
+            // 创建 InstancedMesh
+            const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+            instancedMesh.frustumCulled = false; // 禁用视锥体剔除
+
+            // 添加到场景
+            sceneInstance?.add(instancedMesh);
+            instancedMeshGroups.push(instancedMesh);
+
+            // 保存额外数据
+            instancedMesh.userData = {
+              time: Math.random() * 1000,
+              rotationSpeed,
+              pulseFrequency,
+              pulseAmplitude,
+            };
+
+            // 移除临时事件监听
+            worker?.removeEventListener('message', workerHandler);
+
+            // 完成创建
+            resolve();
+          }
+        };
+
+        worker.addEventListener('message', workerHandler);
       });
-      
-      // 创建 InstancedMesh
-      const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
-      instancedMesh.frustumCulled = false; // 禁用视锥体剔除
-      
-      // 添加到场景
-      sceneInstance.add(instancedMesh);
-      instancedMeshGroups.push(instancedMesh);
-      
-      // 保存额外数据
-      instancedMesh.userData = {
-        time: Math.random() * 1000,
-        rotationSpeed,
-        pulseFrequency,
-        pulseAmplitude,
-      };
     }
 
     // 更新粒子组函数 - 使用 Shader
@@ -284,26 +288,27 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       instancedMesh: THREE.InstancedMesh,
       delta: number,
       focalPoint: { x: number; y: number; z: number },
-      globalMotion: { time: number; amplitude: number }
+      globalMotion: { time: number; amplitude: number },
     ): void {
       const material = instancedMesh.material as THREE.ShaderMaterial;
       const userData = instancedMesh.userData;
-      
+
       // 更新时间
       userData.time += delta;
-      
+
       // 更新 shader uniforms
       material.uniforms.time.value = userData.time;
       material.uniforms.focalPoint.value.set(focalPoint.x, focalPoint.y, focalPoint.z);
       material.uniforms.globalMotion.value.set(
         Math.sin(globalMotion.time) * globalMotion.amplitude,
         Math.cos(globalMotion.time * 1.3) * globalMotion.amplitude,
-        Math.sin(globalMotion.time * 0.7) * globalMotion.amplitude
+        Math.sin(globalMotion.time * 0.7) * globalMotion.amplitude,
       );
-      
+
       // 脉动效果
-      material.uniforms.pulseFactor.value = Math.sin(userData.time * userData.pulseFrequency) * userData.pulseAmplitude + 1.0;
-      
+      material.uniforms.pulseFactor.value =
+        Math.sin(userData.time * userData.pulseFrequency) * userData.pulseAmplitude + 1.0;
+
       // 旋转整个网格 (虽然大部分动画效果都在 shader 中，但整体旋转仍然有用)
       instancedMesh.rotation.x += userData.rotationSpeed * delta;
       instancedMesh.rotation.y += userData.rotationSpeed * delta * 1.5;
@@ -340,6 +345,12 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       // 清理相机和场景
       cameraInstance = null;
       sceneInstance = null;
+
+      // 终止 Worker
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
     }
 
     useEffect(() => {
@@ -374,6 +385,14 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       // 异步初始化系统
       const initParticleSystem = async () => {
         try {
+          // 创建 Worker - 使用安全的工厂函数
+          worker = createParticleWorker();
+
+          // 如果 Worker 创建失败，回退到非 Worker 模式
+          if (!worker) {
+            console.warn('WebWorker 创建失败，回退到主线程模式');
+          }
+
           // 加载纹理
           loadedTextures = await loadTextures();
 
@@ -433,11 +452,12 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
           // 初始颜色分布
           const initialColors = generateInitialColors();
 
-          // 创建各种粒子组
-          PARTICLE_GROUP_PRESETS.forEach((preset, index) => {
+          // 创建各种粒子组 - 使用 Promise.all 并行创建
+          const createPromises = PARTICLE_GROUP_PRESETS.map((preset, index) => {
             // 调整粒子数量 - 根据密度
             const particleCount = Math.floor(
-              (config[`particleCount${index + 1}` as keyof typeof config] as number) * densityMultiplier,
+              (config[`particleCount${index + 1}` as keyof typeof config] as number) *
+                densityMultiplier,
             );
 
             // 使用生成的颜色
@@ -450,22 +470,132 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
             const pulseFrequency = preset.pulseFrequency * motionParams.pulseMultiplier;
             const pulseAmplitude = preset.pulseAmplitude * motionParams.pulseMultiplier;
 
-            // 创建粒子组 - 使用 InstancedMesh with Shader
-            createInstancedMeshGroup(
-              particleCount,
-              preset.range,
-              preset.size,
-              color,
-              preset.minOpacity,
-              preset.maxOpacity,
-              rotationSpeed,
-              waveSpeed,
-              waveAmplitude,
-              preset.textureKey,
-              pulseFrequency,
-              pulseAmplitude,
-            );
+            // 创建粒子组 - 使用 WebWorker 和 InstancedMesh with Shader
+            return worker
+              ? createInstancedMeshGroup(
+                  particleCount,
+                  preset.range,
+                  preset.size,
+                  color,
+                  preset.minOpacity,
+                  preset.maxOpacity,
+                  rotationSpeed,
+                  waveSpeed,
+                  waveAmplitude,
+                  preset.textureKey,
+                  pulseFrequency,
+                  pulseAmplitude,
+                )
+              : // 如果 Worker 创建失败，使用同步创建方式
+                Promise.resolve().then(() => {
+                  if (!sceneInstance) return;
+
+                  // 创建几何体 - 使用平面几何体
+                  const geometry = new THREE.PlaneGeometry(preset.size, preset.size);
+
+                  // 准备粒子数据
+                  const initialPositions = new Float32Array(particleCount * 3);
+                  const scales = new Float32Array(particleCount);
+                  const phases = new Float32Array(particleCount);
+                  const speeds = new Float32Array(particleCount);
+                  const opacities = new Float32Array(particleCount);
+                  const vertexColors = new Float32Array(particleCount * 3);
+
+                  // 为每个实例设置数据
+                  for (let i = 0; i < particleCount; i++) {
+                    // 在球体中随机分布
+                    const radius = Math.random() * preset.range;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+
+                    const posX = radius * Math.sin(phi) * Math.cos(theta);
+                    const posY = radius * Math.sin(phi) * Math.sin(theta);
+                    const posZ = radius * Math.cos(phi);
+
+                    // 设置初始位置
+                    initialPositions[i * 3] = posX;
+                    initialPositions[i * 3 + 1] = posY;
+                    initialPositions[i * 3 + 2] = posZ;
+
+                    // 设置其他属性
+                    scales[i] = Math.random() * 2 + 0.5;
+                    phases[i] = Math.random() * Math.PI * 2;
+                    speeds[i] = Math.random() * 0.01 + 0.005;
+                    opacities[i] =
+                      Math.random() * (preset.maxOpacity - preset.minOpacity) + preset.minOpacity;
+
+                    // 颜色变化
+                    const hsl = { h: 0, s: 0, l: 0 };
+                    color.getHSL(hsl);
+                    const hueVariation = Math.random() * 0.1 - 0.05; // ±5%色相变化
+                    const particleColor = new THREE.Color().setHSL(
+                      (hsl.h + hueVariation) % 1.0,
+                      0.7 + Math.random() * 0.3, // 饱和度70-100%
+                      0.5 + Math.random() * 0.3, // 亮度50-80%
+                    );
+
+                    vertexColors[i * 3] = particleColor.r;
+                    vertexColors[i * 3 + 1] = particleColor.g;
+                    vertexColors[i * 3 + 2] = particleColor.b;
+                  }
+
+                  // 添加自定义属性到几何体
+                  geometry.setAttribute(
+                    'initialPosition',
+                    new THREE.InstancedBufferAttribute(initialPositions, 3),
+                  );
+                  geometry.setAttribute('scale', new THREE.InstancedBufferAttribute(scales, 1));
+                  geometry.setAttribute('phase', new THREE.InstancedBufferAttribute(phases, 1));
+                  geometry.setAttribute('speed', new THREE.InstancedBufferAttribute(speeds, 1));
+                  geometry.setAttribute(
+                    'opacity',
+                    new THREE.InstancedBufferAttribute(opacities, 1),
+                  );
+                  geometry.setAttribute(
+                    'vertexColor',
+                    new THREE.InstancedBufferAttribute(vertexColors, 3),
+                  );
+
+                  // 创建自定义 shader 材质
+                  const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                      map: { value: loadedTextures[preset.textureKey] },
+                      time: { value: Math.random() * 1000 },
+                      pulseFactor: { value: 1.0 },
+                      waveAmplitude: { value: waveAmplitude },
+                      waveSpeed: { value: waveSpeed },
+                      focalPoint: { value: new THREE.Vector3(0, 0, 0) },
+                      globalMotion: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
+                      baseColor: { value: color },
+                    },
+                    vertexShader,
+                    fragmentShader,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                  });
+
+                  // 创建 InstancedMesh
+                  const instancedMesh = new THREE.InstancedMesh(geometry, material, particleCount);
+                  instancedMesh.frustumCulled = false; // 禁用视锥体剔除
+
+                  // 添加到场景
+                  sceneInstance.add(instancedMesh);
+                  instancedMeshGroups.push(instancedMesh);
+
+                  // 保存额外数据
+                  instancedMesh.userData = {
+                    time: Math.random() * 1000,
+                    rotationSpeed,
+                    pulseFrequency,
+                    pulseAmplitude,
+                  };
+                });
           });
+
+          // 等待所有粒子组创建完成
+          await Promise.all(createPromises);
 
           // 初始化全局运动控制器
           const globalMotion = {
@@ -497,6 +627,30 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
           clock = new THREE.Clock();
           const interval = 1000 / config.targetFPS;
 
+          // Worker 更新颜色状态的处理函数
+          const handleColorUpdate: WorkerMessageHandler<AnimationUpdateData> = e => {
+            const { task, result } = e.data;
+
+            if (task === 'updateAnimationData') {
+              const { colors } = result;
+
+              // 更新每个实例组的基础颜色
+              instancedMeshGroups.forEach((instancedMesh, groupIndex) => {
+                const material = instancedMesh.material as THREE.ShaderMaterial;
+                if (!material.uniforms || !colors[groupIndex]) return;
+
+                // 从 Worker 获取的 RGB 颜色
+                const [r, g, b] = colors[groupIndex];
+                material.uniforms.baseColor.value.setRGB(r, g, b);
+              });
+            }
+          };
+
+          // 添加 Worker 消息监听
+          if (worker) {
+            worker.addEventListener('message', handleColorUpdate);
+          }
+
           // 动画循环
           const animate = () => {
             // 帧率控制
@@ -517,36 +671,51 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
             // 更新全局运动时间
             globalMotion.time += delta * globalMotion.speed;
 
-            // 更新颜色渐变时间
-            colorShift.time += delta * colorShift.speed;
-
             // 定期更新所有实例组的基础颜色
             colorShift.lastUpdateTime += delta;
             if (colorShift.lastUpdateTime >= colorShift.updateInterval) {
               // 重置计时器
               colorShift.lastUpdateTime = 0;
 
-              // 更新每个实例组的基础颜色
-              instancedMeshGroups.forEach((instancedMesh, groupIndex) => {
-                const material = instancedMesh.material as THREE.ShaderMaterial;
-                if (!material.uniforms) return;
+              if (worker) {
+                // 使用 Worker 计算颜色变化
+                worker.postMessage({
+                  task: 'updateAnimationData',
+                  data: {
+                    time: colorShift.time,
+                    delta,
+                    groupCount: instancedMeshGroups.length,
+                    colorController,
+                    colorShift,
+                  },
+                });
+              } else {
+                // 如果没有 Worker，在主线程中处理颜色更新
+                // 更新颜色渐变时间
+                colorShift.time += delta * colorShift.speed;
 
-                // 计算新的色相
-                const baseHueOffset = (colorShift.time * 0.1) % 1.0; // 缓慢循环整个色相环
-                const groupCount = instancedMeshGroups.length || 1;
-                const groupHueOffset = groupIndex * (colorController.hueRange / groupCount);
-                const newHue = (colorController.baseHue + baseHueOffset + groupHueOffset) % 1.0;
+                // 更新每个实例组的基础颜色
+                instancedMeshGroups.forEach((instancedMesh, groupIndex) => {
+                  const material = instancedMesh.material as THREE.ShaderMaterial;
+                  if (!material.uniforms) return;
 
-                // 为每个组创建略微不同的颜色
-                const newColor = new THREE.Color().setHSL(
-                  newHue,
-                  0.8 + Math.sin(colorShift.time + groupIndex) * 0.1, // 波动的饱和度
-                  0.5 + Math.cos(colorShift.time * 0.7 + groupIndex) * 0.15, // 波动的亮度
-                );
+                  // 计算新的色相
+                  const baseHueOffset = (colorShift.time * 0.1) % 1.0;
+                  const groupCount = instancedMeshGroups.length || 1;
+                  const groupHueOffset = groupIndex * (colorController.hueRange / groupCount);
+                  const newHue = (colorController.baseHue + baseHueOffset + groupHueOffset) % 1.0;
 
-                // 更新 shader uniform
-                material.uniforms.baseColor.value = newColor;
-              });
+                  // 为每个组创建略微不同的颜色
+                  const newColor = new THREE.Color().setHSL(
+                    newHue,
+                    0.8 + Math.sin(colorShift.time + groupIndex) * 0.1, // 波动的饱和度
+                    0.5 + Math.cos(colorShift.time * 0.7 + groupIndex) * 0.15, // 波动的亮度
+                  );
+
+                  // 更新 shader uniform
+                  material.uniforms.baseColor.value = newColor;
+                });
+              }
             }
 
             // 更新焦点区域
@@ -574,16 +743,13 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
                 return;
               }
 
-              updateShaderParticles(
-                instancedMesh,
-                delta,
-                focalPoint,
-                globalMotion
-              );
+              updateShaderParticles(instancedMesh, delta, focalPoint, globalMotion);
             });
 
             // 渲染场景
-            renderer.render(scene, camera);
+            if (rendererInstance && sceneInstance && cameraInstance) {
+              rendererInstance.render(sceneInstance, cameraInstance);
+            }
             animationFrameId = requestAnimationFrame(animate);
           };
 
@@ -644,6 +810,9 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
             // 移除事件监听器
             window.removeEventListener('resize', handleResize);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            if (worker) {
+              worker.removeEventListener('message', handleColorUpdate);
+            }
 
             // 清理场景
             cleanupResources();
@@ -674,13 +843,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
           cleanupResources();
         }
       };
-    }, [
-      density,
-      motionIntensity,
-      colorConfig,
-      getDensityMultiplier,
-      getMotionParams,
-    ]);
+    }, [density, motionIntensity, colorConfig, getDensityMultiplier, getMotionParams]);
 
     return (
       <div
