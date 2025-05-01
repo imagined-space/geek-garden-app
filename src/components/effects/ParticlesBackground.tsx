@@ -2,28 +2,52 @@
 
 import React, { useEffect, useRef, memo, useState, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
-import { ParticleGroup, ParticlesBackgroundProps } from '@/types/particles';
+import { ParticlesBackgroundProps } from '@/types/particles';
 import {
   PERFORMANCE_CONFIG,
   PARTICLE_GROUP_PRESETS,
   DEFAULT_COLOR_TRANSITION,
 } from './constants';
 import { detectPerformanceLevel } from './usePerformance';
-import {loadTextures} from './textureLoader';
+import { loadTextures } from './textureLoader';
 import { createHSLColor } from './colorUtils';
 
 // ----------------- 单例控制器 -----------------
 let sceneInstance: THREE.Scene | null = null;
 let cameraInstance: THREE.PerspectiveCamera | null = null;
 let rendererInstance: THREE.WebGLRenderer | null = null;
-let particleGroupsInstance: ParticleGroup[] = [];
+let instancedMeshGroups: THREE.InstancedMesh[] = [];
 let loadedTextures: Record<string, THREE.Texture> = {};
 let isInitialized = false;
 let animationFrameId: number | null = null;
+let dummyObject = new THREE.Object3D(); // 用于更新实例位置和旋转
+
+// 保存每个实例的数据
+interface InstanceData {
+  initialPosition: THREE.Vector3;
+  scale: number;
+  speed: number;
+  phase: number;
+  opacity: number;
+}
+
+// 每个粒子组的实例数据
+interface InstancedMeshGroupData {
+  instances: InstanceData[];
+  time: number;
+  rotationSpeed: number;
+  waveSpeed: number;
+  waveAmplitude: number;
+  pulseFrequency: number;
+  pulseAmplitude: number;
+}
+
+// 存储实例数据的映射
+let instancedMeshDataMap = new Map<THREE.InstancedMesh, InstancedMeshGroupData>();
 
 // ----------------- 主组件 -----------------
 const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
-  ({ density = 'normal', motionIntensity = 'normal', colorTransition }) => {
+  ({ density = 'high', motionIntensity = 'high', colorTransition }) => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isLoaded, setIsLoaded] = useState(false);
 
@@ -77,8 +101,8 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       }
     }, [motionIntensity]);
 
-    // 创建粒子组函数
-    function createParticleGroup(
+    // 创建粒子组函数 - 使用 InstancedMesh
+    function createInstancedMeshGroup(
       count: number,
       range: number,
       size: number,
@@ -94,39 +118,58 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
     ): void {
       if (!sceneInstance) return;
 
-      // 生成粒子
-      const particlesGeometry = new THREE.BufferGeometry();
-      const posArray = new Float32Array(count * 3);
-      const opacityArray = new Float32Array(count);
-      const scaleArray = new Float32Array(count);
-      const speedArray = new Float32Array(count);
-      const phaseArray = new Float32Array(count);
-      const colorArray = new Float32Array(count * 3);
+      // 创建几何体 - 使用平面几何体代替点
+      const geometry = new THREE.PlaneGeometry(size, size);
 
-      // 设置粒子属性
-      for (let i = 0; i < count; i += 1) {
-        // 位置 - 随机分布在球体中
+      // 创建材质
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        map: loadedTextures[textureKey],
+      });
+
+      // 创建 InstancedMesh
+      const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+      instancedMesh.frustumCulled = false; // 禁用视锥体剔除以避免边缘粒子闪烁
+
+      // 创建实例数据
+      const instanceData: InstanceData[] = [];
+
+      for (let i = 0; i < count; i++) {
+        // 在球体中随机分布
         const radius = Math.random() * range;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
 
-        posArray[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-        posArray[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-        posArray[i * 3 + 2] = radius * Math.cos(phi);
+        const posX = radius * Math.sin(phi) * Math.cos(theta);
+        const posY = radius * Math.sin(phi) * Math.sin(theta);
+        const posZ = radius * Math.cos(phi);
 
-        // 透明度
-        opacityArray[i] = Math.random() * (maxOpacity - minOpacity) + minOpacity;
+        // 初始化位置和旋转
+        dummyObject.position.set(posX, posY, posZ);
+        dummyObject.rotation.set(
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+          Math.random() * Math.PI
+        );
+        dummyObject.scale.set(1, 1, 1);
+        dummyObject.updateMatrix();
+        instancedMesh.setMatrixAt(i, dummyObject.matrix);
 
-        // 大小
-        scaleArray[i] = Math.random() * 2 + 0.5;
+        // 为每个实例存储额外数据
+        instanceData.push({
+          initialPosition: new THREE.Vector3(posX, posY, posZ),
+          scale: Math.random() * 2 + 0.5,
+          speed: Math.random() * 0.01 + 0.005,
+          phase: Math.random() * Math.PI * 2,
+          opacity: Math.random() * (maxOpacity - minOpacity) + minOpacity,
+        });
 
-        // 速度
-        speedArray[i] = Math.random() * 0.01 + 0.005;
-
-        // 相位差
-        phaseArray[i] = Math.random() * Math.PI * 2;
-
-        // 颜色变化 - 基于主色调的微妙变化
+        // 为每个实例设置颜色 - 基于主色调的微妙变化
         const hsl = { h: 0, s: 0, l: 0 };
         color.getHSL(hsl);
 
@@ -137,56 +180,33 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
           0.5 + Math.random() * 0.3, // 亮度50-80%
         );
 
-        colorArray[i * 3] = particleColor.r;
-        colorArray[i * 3 + 1] = particleColor.g;
-        colorArray[i * 3 + 2] = particleColor.b;
+        // 设置实例颜色
+        instancedMesh.setColorAt(i, particleColor);
       }
 
-      // 设置几何体属性
-      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-      particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+      // 更新实例矩阵和颜色
+      instancedMesh.instanceMatrix.needsUpdate = true;
+      if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
 
-      // 创建材质
-      const particlesMaterial = new THREE.PointsMaterial({
-        size,
-        color,
-        transparent: true,
-        opacity: 0.8,
-        blending: THREE.AdditiveBlending,
-        vertexColors: true, // 启用顶点颜色
-        depthWrite: false, // 改善透明度渲染
-        map: loadedTextures[textureKey],
-      });
-
-      // 创建粒子系统
-      const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
-
-      // 转换为自定义粒子组类型
-      const particleGroup = particleSystem as unknown as ParticleGroup;
-
-      // 存储额外属性
-      particleGroup.userData = {
-        opacityArray,
-        scaleArray,
-        speedArray,
-        phaseArray,
-        initialPositions: posArray.slice(), // 复制初始位置
+      // 存储实例数据
+      instancedMeshDataMap.set(instancedMesh, {
+        instances: instanceData,
         time: Math.random() * 1000, // 随机初始时间
         rotationSpeed,
         waveSpeed,
         waveAmplitude,
         pulseFrequency,
         pulseAmplitude,
-      };
+      });
 
-      // 添加到场景和粒子组
-      sceneInstance.add(particleGroup);
-      particleGroupsInstance.push(particleGroup);
+      // 添加到场景和实例组
+      sceneInstance.add(instancedMesh);
+      instancedMeshGroups.push(instancedMesh);
     }
 
-    // 更新粒子组函数
-    function updateParticleGroup(
-      particleSystem: ParticleGroup,
+    // 更新粒子组函数 - 使用 InstancedMesh
+    function updateInstancedMeshGroup(
+      instancedMesh: THREE.InstancedMesh,
       groupIndex: number,
       delta: number,
       focalPoint: { x: number; y: number; z: number },
@@ -194,134 +214,117 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
       colorPulse: { time: number; intensity: number },
       updateFraction: number,
     ): void {
-      // 使用解构赋值获取userData中的属性
-      const {
-        phaseArray,
-        initialPositions,
-        rotationSpeed,
-        waveSpeed,
-        waveAmplitude,
-        pulseFrequency = 0.2 + groupIndex * 0.1,
-        pulseAmplitude = 0.15,
-      } = particleSystem.userData;
+      // 获取实例数据
+      const groupData = instancedMeshDataMap.get(instancedMesh);
+      if (!groupData) return;
 
       // 更新时间
-      particleSystem.userData.time += delta;
-      const {time} = particleSystem.userData;
-
-      // 获取位置数组
-      const positions = particleSystem.geometry.attributes.position.array as Float32Array;
-      const count = positions.length / 3;
+      groupData.time += delta;
+      const { time, instances, rotationSpeed, waveSpeed, waveAmplitude, pulseFrequency, pulseAmplitude } = groupData;
 
       // 创建脉动效果
       const pulseFactor = Math.sin(time * pulseFrequency) * pulseAmplitude + 1;
 
-      // 更新颜色 - 为高/中性能设备添加颜色变化
-      if (
-        particleSystem.geometry.attributes.color &&
-        Math.random() < 0.3 // 只在30%的帧更新颜色以节省性能
-      ) {
-        const colors = particleSystem.geometry.attributes.color.array as Float32Array;
-
+      // 颜色脉动
+      if (Math.random() < 0.3) { // 只在30%的帧更新颜色以节省性能
         // 颜色脉动因子
         const colorPulseFactor = Math.sin(colorPulse.time) * colorPulse.intensity;
 
         // 基础颜色
-        const material = particleSystem.material as THREE.PointsMaterial;
+        const material = instancedMesh.material as THREE.MeshBasicMaterial;
         const baseColor = material.color;
         const baseHSL = { h: 0, s: 0, l: 0 };
         baseColor.getHSL(baseHSL);
 
-        // 每10个粒子更新一次颜色，以节约性能
-        for (let i = 0; i < count; i += 10) {
-          // 为每个粒子创建微妙的颜色变化
-          const hueShift = Math.sin(i + colorPulse.time * (1 + i * 0.001)) * 0.05;
-          const newColor = createHSLColor(
-            (baseHSL.h + hueShift) % 1.0,
-            Math.min(1.0, baseHSL.s + colorPulseFactor * 0.2),
-            Math.min(1.0, baseHSL.l + colorPulseFactor * 0.3),
-          );
+        // 每10个实例更新一次颜色，以节约性能
+        for (let i = 0; i < instances.length; i += 10) {
+          if (instancedMesh.instanceColor) {
+            // 为每个实例创建微妙的颜色变化
+            const hueShift = Math.sin(i + colorPulse.time * (1 + i * 0.001)) * 0.05;
+            const newColor = createHSLColor(
+              (baseHSL.h + hueShift) % 1.0,
+              Math.min(1.0, baseHSL.s + colorPulseFactor * 0.2),
+              Math.min(1.0, baseHSL.l + colorPulseFactor * 0.3),
+            );
 
-          // 更新颜色
-          colors[i * 3] = newColor.r;
-          colors[i * 3 + 1] = newColor.g;
-          colors[i * 3 + 2] = newColor.b;
+            // 更新实例颜色
+            instancedMesh.setColorAt(i, newColor);
+          }
         }
 
-        particleSystem.geometry.attributes.color.needsUpdate = true;
+        if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
       }
 
-      // 更新粒子位置
-      for (let i = 0; i < count; i += 1) {
-        // 性能优化：部分粒子不更新位置
-        if (Math.random() > updateFraction) {
-          // 使用 if-else 结构代替 continue 以满足 ESLint no-continue 规则
-          // 什么也不做，跳过此粒子
-        } else {
-          // 获取初始位置
-          const ix = initialPositions[i * 3];
-          const iy = initialPositions[i * 3 + 1];
-          const iz = initialPositions[i * 3 + 2];
+      // 更新实例位置和旋转
+      for (let i = 0; i < instances.length; i++) {
+        // 性能优化：根据 updateFraction 参数决定更新哪些粒子
+        if (Math.random() > updateFraction) continue;
 
-          // 计算到焦点的距离影响
-          const dx = ix - focalPoint.x;
-          const dy = iy - focalPoint.y;
-          const dz = iz - focalPoint.z;
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          const distanceFactor = 1 / (1 + distance * 0.1);
+        const instance = instances[i];
+        const { initialPosition, phase } = instance;
 
-          // 波动效果
-          const particleTime = time * waveSpeed + phaseArray[i % phaseArray.length];
-          const xWave = Math.sin(particleTime + ix) * waveAmplitude;
-          const yWave = Math.cos(particleTime * 0.8 + iy * 2) * waveAmplitude;
-          const zWave = Math.sin(particleTime * 1.2 + iz * 1.5) * waveAmplitude;
+        // 计算到焦点的距离影响
+        const dx = initialPosition.x - focalPoint.x;
+        const dy = initialPosition.y - focalPoint.y;
+        const dz = initialPosition.z - focalPoint.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const distanceFactor = 1 / (1 + distance * 0.1);
 
-          // 全局波动效果
-          const globalFactor = 0.01;
-          const globalX = Math.sin(globalMotion.time + i * globalFactor) * globalMotion.amplitude;
-          const globalY =
-            Math.cos(globalMotion.time * 1.3 + i * globalFactor) * globalMotion.amplitude;
-          const globalZ =
-            Math.sin(globalMotion.time * 0.7 + i * globalFactor) * globalMotion.amplitude;
+        // 波动效果
+        const particleTime = time * waveSpeed + phase;
+        const xWave = Math.sin(particleTime + initialPosition.x) * waveAmplitude;
+        const yWave = Math.cos(particleTime * 0.8 + initialPosition.y * 2) * waveAmplitude;
+        const zWave = Math.sin(particleTime * 1.2 + initialPosition.z * 1.5) * waveAmplitude;
 
-          // 综合所有效果计算新位置
-          positions[i * 3] = ix + xWave * pulseFactor + globalX;
-          positions[i * 3 + 1] = iy + yWave * pulseFactor + globalY;
-          positions[i * 3 + 2] = iz + zWave * pulseFactor + globalZ;
+        // 全局波动效果
+        const globalFactor = 0.01;
+        const globalX = Math.sin(globalMotion.time + i * globalFactor) * globalMotion.amplitude;
+        const globalY = Math.cos(globalMotion.time * 1.3 + i * globalFactor) * globalMotion.amplitude;
+        const globalZ = Math.sin(globalMotion.time * 0.7 + i * globalFactor) * globalMotion.amplitude;
 
-          // 朝焦点方向轻微吸引
-          positions[i * 3] -= dx * distanceFactor * 0.03;
-          positions[i * 3 + 1] -= dy * distanceFactor * 0.03;
-          positions[i * 3 + 2] -= dz * distanceFactor * 0.03;
-        }
+        // 综合所有效果计算新位置
+        const newX = initialPosition.x + xWave * pulseFactor + globalX - dx * distanceFactor * 0.03;
+        const newY = initialPosition.y + yWave * pulseFactor + globalY - dy * distanceFactor * 0.03;
+        const newZ = initialPosition.z + zWave * pulseFactor + globalZ - dz * distanceFactor * 0.03;
+
+        // 更新实例矩阵
+        dummyObject.position.set(newX, newY, newZ);
+        
+        // 添加旋转效果
+        dummyObject.rotation.x = time * rotationSpeed * (groupIndex % 2 === 0 ? 1 : -1);
+        dummyObject.rotation.y = time * rotationSpeed * 1.5;
+        dummyObject.rotation.z = time * rotationSpeed * 0.5 * (groupIndex % 2 === 0 ? -1 : 1);
+        
+        // 设置缩放
+        const scaleFactor = instance.scale * (1 + Math.sin(time * 0.5) * 0.1);
+        dummyObject.scale.set(scaleFactor, scaleFactor, scaleFactor);
+        
+        dummyObject.updateMatrix();
+        instancedMesh.setMatrixAt(i, dummyObject.matrix);
       }
 
-      // 更新位置缓冲区
-      particleSystem.geometry.attributes.position.needsUpdate = true;
+      // 更新实例矩阵
+      instancedMesh.instanceMatrix.needsUpdate = true;
 
       // 脉动透明度效果
-      (particleSystem.material as THREE.PointsMaterial).opacity = 0.6 + Math.sin(time * 0.5) * 0.2;
-
-      // 自动旋转
-      particleSystem.rotation.x += rotationSpeed * (groupIndex % 2 === 0 ? 1 : -1);
-      particleSystem.rotation.y += rotationSpeed * 1.5;
-      particleSystem.rotation.z += rotationSpeed * 0.5 * (groupIndex % 2 === 0 ? -1 : 1);
+      (instancedMesh.material as THREE.MeshBasicMaterial).opacity = 0.6 + Math.sin(time * 0.5) * 0.2;
     }
 
     // 清理资源函数
     function cleanupResources(): void {
       // 清理场景
-      if (sceneInstance && particleGroupsInstance.length > 0) {
-        particleGroupsInstance.forEach(system => {
-          sceneInstance?.remove(system);
-          system.geometry.dispose();
+      if (sceneInstance && instancedMeshGroups.length > 0) {
+        instancedMeshGroups.forEach(mesh => {
+          sceneInstance?.remove(mesh);
+          mesh.geometry.dispose();
 
-          if (system.material instanceof THREE.Material) {
-            system.material.dispose();
+          if (mesh.material instanceof THREE.Material) {
+            mesh.material.dispose();
           }
         });
 
-        particleGroupsInstance = [];
+        instancedMeshGroups = [];
+        instancedMeshDataMap.clear();
       }
 
       // 清理纹理
@@ -348,7 +351,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
 
       // 初始化标志
       let localIsInitialized = false;
-      let isMounted = true; // Add mounting flag to track component mount status
+      let isMounted = true; // 添加挂载标志以跟踪组件挂载状态
       let clock: THREE.Clock;
       let lastTime = 0;
 
@@ -404,13 +407,13 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
           if (isMounted && mountRef.current) {
             mountRef.current.appendChild(renderer.domElement);
           } else {
-            // Don't throw error, just return early if unmounted
+            // 如果已卸载，直接返回
             return undefined;
           }
 
-          // 创建粒子组
-          const particleGroups: ParticleGroup[] = [];
-          particleGroupsInstance = particleGroups;
+          // 初始化实例组
+          instancedMeshGroups = [];
+          instancedMeshDataMap.clear();
 
           // 生成初始颜色分布
           const generateInitialColors = () => {
@@ -449,8 +452,8 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
             const pulseFrequency = preset.pulseFrequency * motionParams.pulseMultiplier;
             const pulseAmplitude = preset.pulseAmplitude * motionParams.pulseMultiplier;
 
-            // 创建粒子组
-            createParticleGroup(
+            // 创建粒子组 - 使用 InstancedMesh
+            createInstancedMeshGroup(
               particleCount,
               preset.range,
               preset.size,
@@ -529,17 +532,17 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
             // 更新颜色渐变时间
             colorShift.time += delta * colorShift.speed;
 
-            // 定期更新所有粒子组的基础颜色
+            // 定期更新所有实例组的基础颜色
             colorShift.lastUpdateTime += delta;
             if (colorShift.lastUpdateTime >= colorShift.updateInterval) {
               // 重置计时器
               colorShift.lastUpdateTime = 0;
 
-              // 更新每个粒子组的基础颜色
-              particleGroups.forEach((particleSystem, groupIndex) => {
+              // 更新每个实例组的基础颜色
+              instancedMeshGroups.forEach((instancedMesh, groupIndex) => {
                 // 计算新的色相
                 const baseHueOffset = (colorShift.time * 0.1) % 1.0; // 缓慢循环整个色相环
-                const groupCount = particleGroups.length || 1; // 防止除零
+                const groupCount = instancedMeshGroups.length || 1; // 防止除零
                 const groupHueOffset = groupIndex * (colorController.hueRange / groupCount);
                 const newHue = (colorController.baseHue + baseHueOffset + groupHueOffset) % 1.0;
 
@@ -551,7 +554,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
                 );
 
                 // 更新材质颜色
-                const material = particleSystem.material as THREE.PointsMaterial;
+                const material = instancedMesh.material as THREE.MeshBasicMaterial;
                 material.color = newColor;
               });
             }
@@ -574,15 +577,15 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
               focalPoint.z += (focalPoint.targetZ - focalPoint.z) * 0.01;
             }
 
-            // 更新所有粒子组
-            particleGroups.forEach((particleSystem, groupIndex) => {
+            // 更新所有实例组
+            instancedMeshGroups.forEach((instancedMesh, groupIndex) => {
               // 低性能设备跳过部分组的更新
               if (performanceLevel === 'low' && groupIndex > 0 && Math.random() < 0.3) {
                 return;
               }
 
-              updateParticleGroup(
-                particleSystem,
+              updateInstancedMeshGroup(
+                instancedMesh,
                 groupIndex,
                 delta,
                 focalPoint,
@@ -642,7 +645,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
 
           // 返回清理函数
           return () => {
-            isMounted = false; // Mark as unmounted
+            isMounted = false; // 标记为已卸载
             localIsInitialized = false;
             isInitialized = false;
 
@@ -650,6 +653,10 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
               cancelAnimationFrame(animationFrameId);
               animationFrameId = null;
             }
+
+            // 移除事件监听器
+            window.removeEventListener('resize', handleResize);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
 
             // 清理场景
             cleanupResources();
@@ -683,7 +690,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = memo(
     }, [
       density,
       motionIntensity,
-      colorConfig, // Added colorConfig as a dependency to fix the React Hook missing dependency warning
+      colorConfig,
       getDensityMultiplier,
       getMotionParams,
     ]);
