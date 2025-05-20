@@ -1,8 +1,14 @@
-import { AllTranslations } from "./types";
-import zhTranslations from "./zh";
-import enTranslations from "./en";
-import jaTranslations from "./ja";
-import koTranslations from "./ko";
+import {
+  AllTranslations,
+  Language,
+  LanguageContextType,
+  LanguageProviderProps,
+  TranslationDict,
+} from './types';
+import zhTranslations from './zh';
+import enTranslations from './en';
+import jaTranslations from './ja';
+import koTranslations from './ko';
 
 // 将所有翻译汇总在一起
 export const translations: AllTranslations = {
@@ -13,10 +19,7 @@ export const translations: AllTranslations = {
 };
 
 // 导出获取翻译的函数
-export const getTranslation = (
-  language: keyof AllTranslations,
-  key: string
-): string => {
+export const getTranslation = (language: keyof AllTranslations, key: string): string => {
   if (!translations[language]) {
     return key;
   }
@@ -24,4 +27,10 @@ export const getTranslation = (
   return translations[language][key] || key;
 };
 
-export * from "./types";
+export type {
+  AllTranslations,
+  Language,
+  LanguageContextType,
+  LanguageProviderProps,
+  TranslationDict,
+};
