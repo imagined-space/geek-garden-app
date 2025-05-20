@@ -3,11 +3,18 @@
 
 // 正确扩展 Cypress 命名空间，避免类型冲突
 declare namespace Cypress {
-  // 使用接口合并而不是重新声明
-  interface AUTWindow {
+  // 扩展现有类型，而不是重新声明
+  interface Window {
     _mockEthereum: any;
     ethereum: any;
-    WalletConnectClient: any;
+    WalletConnectClient: {
+      init: () => Promise<{
+        connect: () => Promise<{
+          accounts: string[];
+          chainId: number;
+        }>;
+      }>;
+    };
   }
 }
 
@@ -57,30 +64,31 @@ describe('Web3钱包连接综合测试', () => {
     });
   });
 
-  // 使用真实页面和模拟的以太坊对象测试钱包连接 - 修复版
+  // 使用真实页面和模拟的以太坊对象测试钱包连接
   it('使用模拟以太坊对象测试钱包连接', { retries: 3 }, () => {
     // 声明测试中使用的变量
     let hasClickedButton = false;
 
-    // 增强版以太坊模拟对象，包括签名功能 - 添加类型定义
-    const mockEthereum: {
-      isMetaMask: boolean;
-      request: any;
-      _events: Record<string, Function[]>;
-      on: any;
-      removeListener: any;
-      _triggerEvent: (eventName: string, ...args: any[]) => void;
-      chainId: string;
-      networkVersion: string;
-      isConnected: () => boolean;
-      selectedAddress: string;
-      enable: () => Promise<string[]>;
-      sendAsync: any;
-      send: any;
-    } = {
+    // 以太坊请求类型定义
+    interface EthereumRequest {
+      method: string;
+      params?: any[];
+    }
+
+    // 以太坊事件回调类型定义
+    type EthereumEventCallback = (...args: any[]) => void;
+
+    // 以太坊事件存储结构类型定义
+    interface EventsMap {
+      [key: string]: EthereumEventCallback[];
+    }
+
+    // 增强版以太坊模拟对象定义，包括类型
+    const mockEthereum = {
       isMetaMask: true,
+
       // 模拟request方法，处理不同的请求类型
-      request: cy.stub().callsFake((request: { method: string }) => {
+      request: cy.stub().callsFake((request: EthereumRequest) => {
         // 根据请求类型返回不同的响应
         if (request.method === 'eth_accounts') {
           return Promise.resolve(['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f']);
@@ -89,7 +97,6 @@ describe('Web3钱包连接综合测试', () => {
           return Promise.resolve('0x1'); // Ethereum Mainnet
         }
         if (request.method === 'personal_sign') {
-          // 模拟成功的签名，返回一个有效的签名字符串
           return Promise.resolve(
             '0x5a89b577549941bb571faa59bb7bcf7b9d9359f72651451efa9747f5195ad9c2443b25e9f85d8ad2a18a391f95d87eabc3808c972e5d5e67067de92757e493451c',
           );
@@ -100,73 +107,85 @@ describe('Web3钱包连接综合测试', () => {
         // 默认返回空数组
         return Promise.resolve([]);
       }),
-      // 事件监听器存储
-      _events: {},
+
+      // 事件监听器存储，使用明确的类型
+      _events: {} as EventsMap,
+
       // 模拟on方法
-      on: cy.stub().callsFake((eventName: string, callback: Function) => {
+      on: cy.stub().callsFake((eventName: string, callback: EthereumEventCallback) => {
         if (!mockEthereum._events[eventName]) {
           mockEthereum._events[eventName] = [];
         }
         mockEthereum._events[eventName].push(callback);
         return mockEthereum;
       }),
+
       // 模拟removeListener方法
-      removeListener: cy.stub().callsFake((eventName: string, callback: Function) => {
+      removeListener: cy.stub().callsFake((eventName: string, callback: EthereumEventCallback) => {
         if (mockEthereum._events[eventName]) {
           mockEthereum._events[eventName] = mockEthereum._events[eventName].filter(
-            (cb: Function) => cb !== callback,
+            (cb: EthereumEventCallback) => cb !== callback,
           );
         }
         return mockEthereum;
       }),
-      // 触发事件的辅助方法（测试中可以使用）
+
+      // 触发事件的辅助方法
       _triggerEvent: (eventName: string, ...args: any[]) => {
         if (mockEthereum._events[eventName]) {
-          mockEthereum._events[eventName].forEach((callback: Function) => callback(...args));
+          mockEthereum._events[eventName].forEach((callback: EthereumEventCallback) =>
+            callback(...args),
+          );
         }
       },
+
       chainId: '0x1',
       networkVersion: '1',
       isConnected: () => true,
       selectedAddress: '0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f',
-      // 确保这些函数也存在
       enable: () => Promise.resolve(['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f']),
-      sendAsync: cy.stub().callsFake((payload: any, callback: Function) => {
-        if (payload.method === 'eth_accounts') {
-          callback(null, { result: ['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f'] });
-        } else if (payload.method === 'eth_chainId') {
-          callback(null, { result: '0x1' });
-        } else if (payload.method === 'personal_sign') {
-          callback(null, {
-            result:
-              '0x5a89b577549941bb571faa59bb7bcf7b9d9359f72651451efa9747f5195ad9c2443b25e9f85d8ad2a18a391f95d87eabc3808c972e5d5e67067de92757e493451c',
-          });
-        } else {
-          callback(null, { result: [] });
-        }
-      }),
-      send: cy.stub().callsFake((payload: any, callback: Function | undefined) => {
-        if (typeof callback === 'function') {
+
+      sendAsync: cy
+        .stub()
+        .callsFake((payload: any, callback: (error: Error | null, result?: any) => void) => {
           if (payload.method === 'eth_accounts') {
             callback(null, { result: ['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f'] });
           } else if (payload.method === 'eth_chainId') {
             callback(null, { result: '0x1' });
+          } else if (payload.method === 'personal_sign') {
+            callback(null, {
+              result:
+                '0x5a89b577549941bb571faa59bb7bcf7b9d9359f72651451efa9747f5195ad9c2443b25e9f85d8ad2a18a391f95d87eabc3808c972e5d5e67067de92757e493451c',
+            });
           } else {
             callback(null, { result: [] });
           }
-        } else {
-          if (payload === 'eth_accounts') {
-            return { result: ['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f'] };
-          } else if (payload === 'eth_chainId') {
-            return { result: '0x1' };
+        }),
+
+      send: cy
+        .stub()
+        .callsFake((payload: any, callback?: (error: Error | null, result?: any) => void) => {
+          if (typeof callback === 'function') {
+            if (payload.method === 'eth_accounts') {
+              callback(null, { result: ['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f'] });
+            } else if (payload.method === 'eth_chainId') {
+              callback(null, { result: '0x1' });
+            } else {
+              callback(null, { result: [] });
+            }
           } else {
-            return { result: [] };
+            if (payload === 'eth_accounts') {
+              return { result: ['0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f'] };
+            } else if (payload === 'eth_chainId') {
+              return { result: '0x1' };
+            } else {
+              return { result: [] };
+            }
           }
-        }
-      }),
+        }),
     };
 
-    // 正确的方式模拟localStorage - 通过修改localStorage的原始方法
+    // 访问页面并注入模拟对象
     cy.visit('/', {
       onBeforeLoad(win) {
         // 备份原始的localStorage方法
@@ -174,7 +193,7 @@ describe('Web3钱包连接综合测试', () => {
         const originalSetItem = win.localStorage.setItem;
 
         // 覆盖localStorage的getItem方法
-        cy.stub(win.localStorage, 'getItem').callsFake(key => {
+        cy.stub(win.localStorage, 'getItem').callsFake((key: string) => {
           // 如果是钱包相关的存储键
           if (
             key.includes('wallet') ||
@@ -192,8 +211,8 @@ describe('Web3钱包连接综合测试', () => {
           return originalGetItem.call(win.localStorage, key);
         });
 
-        // 覆盖localStorage的setItem方法 (可选)
-        cy.stub(win.localStorage, 'setItem').callsFake((key, value) => {
+        // 覆盖localStorage的setItem方法
+        cy.stub(win.localStorage, 'setItem').callsFake((key: string, value: string) => {
           // 如果是钱包相关的存储键，记录日志但不实际设置
           if (
             key.includes('wallet') ||
@@ -210,8 +229,6 @@ describe('Web3钱包连接综合测试', () => {
 
         // 注入模拟对象
         win.ethereum = mockEthereum;
-
-        // 在window对象上保存模拟对象的引用，以便在测试中访问
         win._mockEthereum = mockEthereum;
 
         // 模拟WalletConnect库
@@ -229,106 +246,87 @@ describe('Web3钱包连接综合测试', () => {
 
     // 等待页面加载
     cy.wait(5000);
-
-    // 截图以查看初始状态
     cy.screenshot('wallet-before-connection');
 
-    // 使用更灵活的选择器查找钱包连接按钮
+    // 改进的钱包按钮查找逻辑 - 修复jQuery错误
     cy.get('body').then($body => {
       // 检查页面上是否已经显示了钱包地址
       const bodyText = $body.text();
       const hasWalletAddress =
         bodyText.includes('0xF226') || bodyText.match(/0x[a-fA-F0-9]{4,}/) !== null;
 
-      // 如果已经显示钱包地址，则认为已经连接
       if (hasWalletAddress) {
         cy.log('页面已显示钱包地址，无需点击连接按钮');
         return;
       }
 
-      // 从DOM中寻找可能的钱包连接按钮
-      cy.window().then(win => {
-        // 首先尝试找到明确的连接钱包按钮
-        cy.get('body')
-          .find(
-            'button, a[role="button"], [role="button"], div[role="button"], span[role="button"]',
-          )
-          .filter(':visible')
-          .then($elements => {
-            // 过滤出可能是钱包连接的按钮
-            const walletButtons = $elements.filter((_, el) => {
-              const text = el.textContent?.toLowerCase() || '';
-              return (
-                text.includes('connect') ||
-                text.includes('wallet') ||
-                text.includes('连接') ||
-                text.includes('钱包')
-              );
-            });
+      // 先尝试明确的钱包连接按钮文本
+      const walletButtonTexts = ['connect wallet', 'connect', '连接钱包', '连接', 'wallet'];
+      let buttonFound = false;
 
-            if (walletButtons.length > 0) {
-              cy.log(`找到钱包连接按钮: ${walletButtons[0].outerHTML}`);
-              // 修复：使用 cy.wrap() 正确包装 DOM 元素
-              cy.wrap(walletButtons[0] as unknown as HTMLElement).click({ force: true });
-              cy.wait(3000); // 等待连接过程
-            } else {
-              // 没有找到明确的按钮，尝试通过ID或类名查找
-              cy.log('未找到明确的钱包连接按钮，尝试通过ID或类名查找');
-
-              // 定义可能的按钮选择器
-              const buttonSelectors = [
-                '[id*="connect"]',
-                '[id*="wallet"]',
-                '[class*="connect"]',
-                '[class*="wallet"]',
-                '[data-testid*="connect"]',
-                '[data-testid*="wallet"]',
-              ];
-
-              // 尝试每一个选择器
-              cy.wrap(buttonSelectors).each(selector => {
-                cy.get('body')
-                  .find(selector)
-                  .then($btns => {
-                    if ($btns.length > 0 && !hasClickedButton) {
-                      cy.log(`通过选择器 ${selector} 找到按钮`);
-                      // 修复：遍历 jQuery 对象获取原生 DOM 元素
-                      if ($btns[0]) {
-                        // 使用类型断言获取原生 DOM 元素
-                        cy.wrap($btns[0] as unknown as HTMLElement).click({ force: true });
-                        cy.wait(2000);
-                        hasClickedButton = true;
-                        return false; // 中断each循环
-                      }
-                    }
-                  });
-              });
-
-              // 如果仍未找到按钮，尝试直接触发以太坊事件
-              if (!hasClickedButton) {
-                cy.log('未能找到钱包连接按钮，尝试直接触发连接事件');
-
-                // 尝试自动触发钱包连接
-                win._mockEthereum._triggerEvent('accountsChanged', [
-                  '0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f',
-                ]);
-                win._mockEthereum._triggerEvent('connect', { chainId: '0x1' });
-
-                // 执行异步请求以触发连接
-                win.ethereum
-                  .request({ method: 'eth_requestAccounts' })
-                  .then((accounts: string[]) => {
-                    cy.log(`模拟请求账户成功: ${accounts[0]}`);
-                  });
-
-                cy.wait(2000);
-              }
-            }
-          });
+      // 修复: 使用正确的jQuery访问方式
+      const buttons = $body.find('button, a[role="button"], [role="button"]').filter(function () {
+        // 使用jQuery的上下文this对象
+        const text = Cypress.$(this).text().toLowerCase();
+        return walletButtonTexts.some(btnText => text.includes(btnText));
       });
+
+      if (buttons.length > 0) {
+        cy.log('找到钱包连接按钮通过文本内容');
+        cy.wrap(buttons[0]).click({ force: true });
+        buttonFound = true;
+        return;
+      }
+
+      // 如果没找到，尝试通过常见的选择器查找
+      if (!buttonFound) {
+        // 定义可能的按钮选择器
+        const buttonSelectors = [
+          '[id*="connect"]',
+          '[id*="wallet"]',
+          '[class*="connect"]',
+          '[class*="wallet"]',
+          '[data-testid*="connect"]',
+          '[data-testid*="wallet"]',
+        ];
+
+        // 改进的选择器查找方法
+        cy.document().then(doc => {
+          // 对每个选择器，直接使用DOM API检查是否存在匹配元素
+          for (const selector of buttonSelectors) {
+            const elements = doc.querySelectorAll(selector);
+            if (elements.length > 0) {
+              cy.log(`通过选择器 ${selector} 找到按钮`);
+              cy.wrap(elements[0]).click({ force: true });
+              buttonFound = true;
+              break;
+            }
+          }
+
+          // 如果仍未找到按钮，尝试直接触发以太坊事件
+          if (!buttonFound) {
+            cy.log('未能找到钱包连接按钮，尝试直接触发连接事件');
+            cy.window().then(win => {
+              // 使用类型断言确保_mockEthereum存在
+              const mockEth = win._mockEthereum;
+              mockEth._triggerEvent('accountsChanged', [
+                '0xF226d4125fC81100bf0b7A7a3e9F9C2dE9B76a3f',
+              ]);
+              mockEth._triggerEvent('connect', { chainId: '0x1' });
+
+              // 使用类型断言确保ethereum存在
+              const eth = win.ethereum;
+              eth.request({ method: 'eth_requestAccounts' }).then((accounts: string[]) => {
+                cy.log(`模拟请求账户成功: ${accounts[0]}`);
+              });
+            });
+          }
+        });
+      }
     });
 
-    // 截图以查看连接后状态
+    // 等待连接事件处理
+    cy.wait(3000);
     cy.screenshot('wallet-after-connection');
 
     // 检查连接状态
@@ -352,25 +350,24 @@ describe('Web3钱包连接综合测试', () => {
         if (isConnected) {
           cy.log('未找到明确的地址显示，但有连接成功迹象');
         } else {
-          cy.log('未找到连接成功的迹象，可能需要检查应用的具体实现');
+          cy.log('未找到连接成功的迹象，尝试模态框操作');
 
           // 尝试点击任何模态框中的按钮以完成连接流程
-          cy.get('body')
-            .find('.modal button, [role="dialog"] button, .dialog button')
-            .then($modalButtons => {
-              if ($modalButtons.length > 0) {
-                cy.log('找到模态框按钮，尝试点击完成连接');
-                // 修复：使用类型断言处理 jQuery 对象
-                if ($modalButtons[0]) {
-                  cy.wrap($modalButtons[0] as unknown as HTMLElement).click({ force: true });
-                  cy.wait(2000);
-                }
-              }
-            });
+          cy.get('body').then($body => {
+            // 先检查是否存在模态框元素，避免等待超时
+            const modalButtons = $body.find(
+              '.modal button, [role="dialog"] button, .dialog button',
+            );
+            if (modalButtons.length > 0) {
+              cy.log('找到模态框按钮，尝试点击完成连接');
+              cy.wrap(modalButtons[0]).click({ force: true });
+            } else {
+              cy.log('未找到模态框按钮，可能不需要额外的确认步骤');
+            }
+          });
         }
       }
 
-      // 测试继续，不标记为失败
       cy.log('模拟以太坊测试完成');
     });
   });
@@ -500,31 +497,31 @@ describe('Web3钱包连接综合测试', () => {
       // 创建报告内容
       const reportContent = `
           # Web3钱包连接测试报告
-    
+
           ## 测试环境
           - 测试工具: Cypress
           - 测试日期: ${new Date().toLocaleDateString()}
           - 测试对象: Web3 University 应用程序钱包连接功能
-    
+
           ## 测试结果摘要
           - 服务器连接: 测试过程中可能出现服务器连接问题
           - 钱包状态检测: 测试能够检测钱包的连接状态
           - 模拟以太坊测试: 使用增强的以太坊模拟对象测试了钱包连接
           - UI交互测试: 使用模拟页面测试了基本交互
-          
+
           ## 遇到的问题
           1. 签名验证失败: 在真实环境中测试时，签名验证可能失败
           2. 连接按钮查找困难: 不同UI框架下按钮选择器可能不同
           3. API调用失败: 某些API调用可能返回401未授权状态码
           4. localStorage模拟问题: 无法直接定义localStorage属性
-          
+
           ## 建议
           1. 确保开发服务器在测试前正常运行
           2. 为钱包连接按钮添加特定的测试ID (data-testid="connect-wallet-button")
           3. 考虑在测试环境中禁用或模拟签名验证
           4. 正确模拟localStorage，使用stub替代直接定义属性
           5. 尝试使用更多的钱包方法模拟，包括旧版API (sendAsync, send)
-          
+
           ## 后续步骤
           - 完善自动化测试，增加对签名验证的模拟
           - 添加更多测试场景，如网络切换和断开连接
@@ -546,4 +543,4 @@ describe('Web3钱包连接综合测试', () => {
       cy.log('继续执行测试');
     }
   });
-});
+})
