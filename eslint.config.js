@@ -21,6 +21,7 @@ export default [
     'next/core-web-vitals',
     'prettier',
     'plugin:eslint-plugin-next-on-pages/recommended',
+    'plugin:cypress/recommended',
   ),
   // 特殊规则：为枚举类型文件禁用未使用变量检查
   {
@@ -136,6 +137,7 @@ export default [
   {
     plugins: {
       'eslint-plugin-next-on-pages': {},
+      plugins: ['cypress'], 
     },
   },
 ];
