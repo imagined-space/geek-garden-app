@@ -105,7 +105,10 @@
     // Next.js环境声明文件
     "next-env.d.ts",
     // 分发目录中的类型文件
-    "./dist/types/**/*.ts"
+    "./dist/types/**/*.ts",
+    // Cypress测试文件
+    "cypress/**/*.ts",
+    "cypress/**/*.d.ts",
   ],
   // 从编译中排除的文件
   "exclude": [
