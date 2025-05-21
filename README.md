@@ -124,3 +124,6 @@ web3-university-app/
 │   └── lib/               # 工具函数和库
 ```
 
+## Jest Test
+
+- 未提供 effects language token ui wallet 组件
