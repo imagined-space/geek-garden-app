@@ -14,7 +14,7 @@ import ParticlesBackground from '@/components/effects/ParticlesBackground';
 import Footer from '@/components/common/Footer';
 
 export const metadata: Metadata = {
-  title: 'Geek University',
+  title: 'Geek Garden',
   description: 'A Web3 learning platform with cyberpunk style',
 };
 

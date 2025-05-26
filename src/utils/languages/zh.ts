@@ -9,7 +9,7 @@ const zhTranslations: TranslationDict = {
   'button.connectWallet': '连接钱包',
 
   // 英雄区块
-  'hero.welcome': '欢迎来到Web3 University',
+  'hero.welcome': '欢迎来到Web3 Garden',
   'hero.subtitle': '探索区块链技术的前沿知识，提升您的专业技能',
 
   // 特色课程
@@ -47,7 +47,7 @@ const zhTranslations: TranslationDict = {
   // 页脚
   'footer.about': '关于我们',
   'footer.aboutDesc':
-    'Web3 University是专注于区块链教育的线上学习平台，致力于培养区块链领域的专业人才。',
+    'Web3 Garden是专注于区块链教育的线上学习平台，致力于培养区块链领域的专业人才。',
   'footer.quickLinks': '快速链接',
   'footer.home': '首页',
   'footer.courses': '课程',
@@ -57,7 +57,7 @@ const zhTranslations: TranslationDict = {
   'footer.phone': '电话: (123) 456-7890',
   'footer.address': '地址: 北京市海淀区中关村',
   'footer.followUs': '关注我们',
-  'footer.copyright': '© 2025 Web3 University. 保留所有权利。',
+  'footer.copyright': '© 2025 Web3 Garden. 保留所有权利。',
 
   // 语言选择
   'language.zh': '中文',

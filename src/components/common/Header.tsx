@@ -56,7 +56,7 @@ const Header = () => {
                 </svg>
               </div>
               <div>
-                <span className="cyberpunk-title text-xl" >Web3 University</span>
+                <span className="cyberpunk-title text-xl" >Web3 Garden</span>
               </div>
             </Link>
 

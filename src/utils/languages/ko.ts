@@ -9,7 +9,7 @@ const koTranslations: TranslationDict = {
   'button.connectWallet': '지갑 연결',
 
   // 히어로 섹션
-  'hero.welcome': 'Web3 University에 오신 것을 환영합니다',
+  'hero.welcome': 'Web3 Garden에 오신 것을 환영합니다',
   'hero.subtitle': '최첨단 블록체인 지식을 탐색하고 전문 기술을 향상시키세요',
 
   // 추천 코스
@@ -47,7 +47,7 @@ const koTranslations: TranslationDict = {
   // 푸터
   'footer.about': '회사 소개',
   'footer.aboutDesc':
-    'Web3 University는 블록체인 교육에 중점을 둔 온라인 학습 플랫폼으로, 블록체인 분야의 전문가 양성에 전념하고 있습니다.',
+    'Web3 Garden는 블록체인 교육에 중점을 둔 온라인 학습 플랫폼으로, 블록체인 분야의 전문가 양성에 전념하고 있습니다.',
   'footer.quickLinks': '빠른 링크',
   'footer.home': '홈',
   'footer.courses': '코스',
@@ -57,7 +57,7 @@ const koTranslations: TranslationDict = {
   'footer.phone': '전화: (123) 456-7890',
   'footer.address': '주소: 베이징시 하이디안구 중관춘',
   'footer.followUs': '팔로우하기',
-  'footer.copyright': '© 2025 Web3 University. 모든 권리 보유.',
+  'footer.copyright': '© 2025 Web3 Garden. 모든 권리 보유.',
 
   // 언어 선택
   'language.zh': '중국어',

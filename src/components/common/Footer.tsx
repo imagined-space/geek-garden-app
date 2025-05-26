@@ -146,7 +146,7 @@ const Footer = () => {
             <div className="mt-4 text-xs font-mono text-neon-green opacity-30 overflow-hidden">
               <div className="marquee">
                 <span>
-                  010101010 CYBR:// WEB3-UNIVERSITY 101010101 BLOCKCHAIN:// CONNECTION_ESTABLISHED
+                  010101010 CYBR:// WEB3-GARDEN 101010101 BLOCKCHAIN:// CONNECTION_ESTABLISHED
                   010101 DEFI:// ACCESS_GRANTED 101010
                 </span>
               </div>

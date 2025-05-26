@@ -8,7 +8,7 @@ import "./CourseCertificate.sol";
 
 /**
  * @title CourseMarket
- * @dev Course marketplace contract for Geek University
+ * @dev Course marketplace contract for Geek Garden
  * Manages course addition, purchase and certification processes
  */
 contract CourseMarket is Ownable {

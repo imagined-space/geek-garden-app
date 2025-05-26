@@ -9,7 +9,7 @@ const jaTranslations: TranslationDict = {
   'button.connectWallet': 'ウォレット接続',
 
   // ヒーローセクション
-  'hero.welcome': 'Web3 Universityへようこそ',
+  'hero.welcome': 'Web3 Gardenへようこそ',
   'hero.subtitle': '最先端のブロックチェーン知識を探求し、専門スキルを向上させましょう',
 
   // 注目のコース
@@ -47,7 +47,7 @@ const jaTranslations: TranslationDict = {
   // フッター
   'footer.about': '私たちについて',
   'footer.aboutDesc':
-    'Web3 Universityはブロックチェーン教育に特化したオンライン学習プラットフォームで、ブロックチェーン分野の専門家を育成することに専念しています。',
+    'Web3 Gardenはブロックチェーン教育に特化したオンライン学習プラットフォームで、ブロックチェーン分野の専門家を育成することに専念しています。',
   'footer.quickLinks': 'クイックリンク',
   'footer.home': 'ホーム',
   'footer.courses': 'コース',
@@ -57,7 +57,7 @@ const jaTranslations: TranslationDict = {
   'footer.phone': '電話: (123) 456-7890',
   'footer.address': '住所: 北京市海淀区中関村',
   'footer.followUs': 'フォローする',
-  'footer.copyright': '© 2025 Web3 University. 全ての権利を保有。',
+  'footer.copyright': '© 2025 Web3 Garden. 全ての権利を保有。',
 
   // 言語選択
   'language.zh': '中国語',

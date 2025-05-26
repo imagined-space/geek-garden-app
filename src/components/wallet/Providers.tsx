@@ -37,7 +37,7 @@ const walletList = [
 ];
 
 const connectors = connectorsForWallets(walletList, {
-  appName: 'Web3 University',
+  appName: 'Web3 Garden',
   projectId,
 });
 
@@ -95,7 +95,7 @@ export function Web3Providers({ children }: { children: ReactNode }) {
           locale={locale}
           showRecentTransactions={true}
           appInfo={{
-            appName: 'Geek University',
+            appName: 'Geek Garden',
             learnMoreUrl: '/about',
           }}
         >

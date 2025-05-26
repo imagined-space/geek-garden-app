@@ -1,4 +1,4 @@
-# Web3 University App
+# Web3 Garden App
 
 基于 Next.js 15 构建的 Web3 大学应用程序，集成了以太坊钱包连接功能和现代前端开发实践。
 
@@ -20,10 +20,6 @@
 ### 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/web3-university-app.git
-cd web3-university-app
-
 # 安装依赖
 yarn install
 ```
@@ -112,7 +108,7 @@ yarn format
 ## 项目结构
 
 ```
-web3-university-app/
+web3-garden-app/
 ├── public/                # 静态资源
 ├── src/
 │   ├── app/               # 应用路由和页面
