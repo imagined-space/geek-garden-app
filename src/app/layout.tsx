@@ -11,6 +11,7 @@ import { Provider as JotaiProvider } from 'jotai';
 import Header from '@/components/common/Header';
 import WalletAuthListener from '@/components/wallet/WalletAuthListener';
 import ParticlesBackground from '@/components/effects/ParticlesBackground';
+import { WebVitalsMonitor } from '@/components/monitor/WebVitalsMonitor';
 import Footer from '@/components/common/Footer';
 
 export const metadata: Metadata = {
@@ -24,7 +25,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const headersList = await headers()
+  const headersList = await headers();
   const cookie = cookieStore.get('preferred-language');
   const languageHeader = headersList.get('accept-language');
 
@@ -42,10 +43,16 @@ export default async function RootLayout({
 
   return (
     <html lang={language}>
-      <body className='cyberpunk-theme'>
+      <body className="cyberpunk-theme">
         <JotaiProvider>
           <LanguageProvider initialLanguage={language}>
             <Web3Providers>
+              <WebVitalsMonitor
+                position="bottom-right"
+                showScore={true}
+                debug={process.env.NODE_ENV === 'development'}
+              />
+              {/* 监听钱包认证状态变化 */}
               <WalletAuthListener />
               <Header />
 

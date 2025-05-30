@@ -6,6 +6,7 @@ import CourseSection from '@/components/courses/CourseSection';
 import { TokenExchange } from '@components/token/TokenExchange';
 import CountUp from '@/components/ui/CountUp';
 import Orb from '@components/common/Orb';
+import { WebVitalsDashboard } from '@/components/monitor/WebVitalsDashboard';
 
 const HomePage = () => {
   const { t } = useLanguage();
@@ -223,25 +224,8 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 合作伙伴 */}
-      {/* <section className="bg-dark-bg py-16 border-t border-neon-blue border-opacity-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="cyberpunk-title text-3xl font-bold mb-4" data-text={t('partners.title')}>
-              {t('partners.title')}
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">{t('partners.subtitle')}</p>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-8 items-center justify-items-center">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-12 flex items-center">
-                <div className="h-10 w-32 bg-gradient-to-r from-neon-blue to-neon-purple opacity-30 rounded cyberpunk-border"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section> */}
+      { /* 仅在开发环境显示详细仪表板 */ }
+      { process.env.NODE_ENV === 'development' && <WebVitalsDashboard /> }
     </section>
   );
 };
